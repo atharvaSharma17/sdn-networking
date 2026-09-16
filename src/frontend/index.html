@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarbonRoute: SDN Routing Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .tab-btn {
+            padding: 0.6rem 1.2rem;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            color: #71717a;
+            transition: all 0.15s ease;
+        }
+        .tab-btn:hover {
+            color: #d4d4d8;
+        }
+        .tab-btn.active {
+            border-bottom-color: #ffffff;
+            color: #ffffff;
+        }
+        #networkGraph {
+            width: 100%;
+            height: 440px;
+            background-color: #09090b;
+            border-radius: 0.375rem;
+        }
+        input[type=range] {
+            accent-color: #ffffff;
+        }
+    </style>
+</head>
+<body class="bg-black text-zinc-100 font-sans min-h-screen flex flex-col antialiased selection:bg-zinc-800 selection:text-white">
+<div id="app" v-cloak class="flex-grow flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-zinc-950 border-b border-zinc-800/80 px-6 py-3.5">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+                <div class="flex items-center gap-2.5">
+                    <span class="w-2 h-2 rounded-full bg-white"></span>
+                    <h1 class="text-lg font-bold tracking-tight text-white font-mono uppercase">CarbonRoute</h1>
+                    <span class="text-[11px] bg-zinc-900 text-zinc-400 font-mono px-2 py-0.5 rounded border border-zinc-800">SDN Evaluation Engine</span>
+                </div>
+                <p class="text-xs text-zinc-500 mt-0.5">Software-Defined Multi-Objective Routing Evaluation System</p>
+            </div>
+            <div class="flex items-center gap-4 text-xs font-mono text-zinc-400">
+                <div>
+                    <span class="text-zinc-600">SRC: </span>
+                    <span class="text-zinc-300">Host 1 (10.0.0.1)</span>
+                </div>
+                <span class="text-zinc-800">/</span>
+                <div>
+                    <span class="text-zinc-600">DST: </span>
+                    <span class="text-zinc-300">Host 2 (10.0.0.2)</span>
+                </div>
+                <span class="text-zinc-800">/</span>
+                <button @click="refreshNetworkTraffic" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded border border-zinc-800 text-xs font-mono transition">
+                    Regenerate Traffic
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Sub-navigation Tabs -->
+    <div class="bg-zinc-950/60 border-b border-zinc-900 px-6">
+        <div class="max-w-7xl mx-auto flex gap-1">
+            <button @click="switchTab('dashboard')" :class="['tab-btn', activeTab === 'dashboard' ? 'active' : '']">
+                Topology & Routing
+            </button>
+            <button @click="switchTab('experiments')" :class="['tab-btn', activeTab === 'experiments' ? 'active' : '']">
+                Scenario Benchmarks
+            </button>
+            <button @click="switchTab('analysis')" :class="['tab-btn', activeTab === 'analysis' ? 'active' : '']">
+                Candidate Path Analysis
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Body -->
+    <main class="max-w-7xl mx-auto px-6 py-6 flex-grow w-full">
+
+        <!-- TAB 1: DASHBOARD & LIVE TOPOLOGY -->
+        <div v-show="activeTab === 'dashboard'" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- Left Column: Controls (4 cols) -->
+                <div class="lg:col-span-4 space-y-5">
+
+                    <!-- Optimization Weight Form -->
+                    <div class="bg-zinc-950 border border-zinc-800/90 rounded-md p-5">
+                        <div class="flex items-center justify-between mb-2">
+                            <h2 class="text-xs font-bold uppercase tracking-wider text-zinc-200 font-mono">Routing Weight Vector</h2>
+                            <span class="text-[11px] font-mono text-zinc-500">&Sigma; = 1.00</span>
+                        </div>
+                        <p class="text-xs text-zinc-500 mb-4 leading-relaxed">
+                            Normalized coefficients for Latency (&alpha;), Energy (&beta;), and Carbon (&gamma;) in the composite cost objective.
+                        </p>
+
+                        <!-- Presets -->
+                        <div class="grid grid-cols-3 gap-2 mb-5">
+                            <button @click="applyPreset('performance')"
+                                    :class="['text-xs py-1.5 px-2 rounded border font-mono transition',
+                                             currentPreset === 'performance' ? 'border-white bg-white text-black font-semibold' : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700']">
+                                Perf
+                            </button>
+                            <button @click="applyPreset('balanced')"
+                                    :class="['text-xs py-1.5 px-2 rounded border font-mono transition',
+                                             currentPreset === 'balanced' ? 'border-white bg-white text-black font-semibold' : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700']">
+                                Balanced
+                            </button>
+                            <button @click="applyPreset('green')"
+                                    :class="['text-xs py-1.5 px-2 rounded border font-mono transition',
+                                             currentPreset === 'green' ? 'border-white bg-white text-black font-semibold' : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700']">
+                                Carbon
+                            </button>
+                        </div>
+
+                        <!-- Sliders -->
+                        <div class="space-y-4">
+                            <div>
+                                <div class="flex justify-between text-xs font-mono mb-1.5">
+                                    <span class="text-zinc-400">Latency (&alpha;)</span>
+                                    <span class="text-white font-semibold">{{ alpha.toFixed(2) }}</span>
+                                </div>
+                                <input type="range" min="0" max="100" v-model.number="alphaInt" @input="onSliderChange('alpha')"
+                                       class="w-full h-1 bg-zinc-800 rounded appearance-none cursor-pointer">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs font-mono mb-1.5">
+                                    <span class="text-zinc-400">Energy (&beta;)</span>
+                                    <span class="text-white font-semibold">{{ beta.toFixed(2) }}</span>
+                                </div>
+                                <input type="range" min="0" max="100" v-model.number="betaInt" @input="onSliderChange('beta')"
+                                       class="w-full h-1 bg-zinc-800 rounded appearance-none cursor-pointer">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs font-mono mb-1.5">
+                                    <span class="text-zinc-400">Carbon (&gamma;)</span>
+                                    <span class="text-white font-semibold">{{ gamma.toFixed(2) }}</span>
+                                </div>
+                                <div class="w-full h-1 bg-zinc-800 rounded overflow-hidden">
+                                    <div class="h-full bg-white transition-all duration-150" :style="{ width: (gamma * 100) + '%' }"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scenario Selection -->
+                    <div class="bg-zinc-950 border border-zinc-800/90 rounded-md p-5">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-zinc-200 font-mono mb-2">Network Scenario</h2>
+                        <p class="text-xs text-zinc-500 mb-3 leading-relaxed">
+                            Simulate traffic contention events to evaluate dynamic path adaptation.
+                        </p>
+
+                        <div class="space-y-2">
+                            <label v-for="(sc, key) in scenarios" :key="key"
+                                   :class="['flex items-start gap-3 p-2.5 rounded border cursor-pointer transition text-xs font-mono',
+                                            selectedScenario === key ? 'border-zinc-400 bg-zinc-900 text-white' : 'border-zinc-800 bg-zinc-950 text-zinc-500 hover:border-zinc-700']">
+                                <input type="radio" :value="key" v-model="selectedScenario" @change="computeRoute" class="mt-0.5 accent-white">
+                                <div>
+                                    <div class="font-semibold text-zinc-200">{{ sc.label }}</div>
+                                    <div class="text-[11px] text-zinc-500 mt-0.5 font-sans">{{ sc.description }}</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right Column: Visual Topology and Metrics (8 cols) -->
+                <div class="lg:col-span-8 space-y-5">
+
+                    <!-- Topology Graph Viewport -->
+                    <div class="bg-zinc-950 border border-zinc-800/90 rounded-md p-5">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b border-zinc-800 gap-2">
+                            <div>
+                                <h2 class="text-xs font-bold uppercase tracking-wider text-zinc-200 font-mono">Topology Forwarding Graph</h2>
+                                <p class="text-xs text-zinc-500 mt-0.5">Active data plane routing path through regional transit switches</p>
+                            </div>
+                            <!-- Monochrome Legend -->
+                            <div class="flex flex-wrap items-center gap-4 text-xs font-mono">
+                                <span class="flex items-center gap-1.5">
+                                    <span class="w-3.5 h-1 bg-white rounded-sm"></span>
+                                    <span class="text-zinc-200 font-semibold">CarbonRoute Path</span>
+                                </span>
+                                <span class="flex items-center gap-1.5">
+                                    <span class="w-3.5 h-1 bg-zinc-500 rounded-sm"></span>
+                                    <span class="text-zinc-400">Baseline Path</span>
+                                </span>
+                                <span class="flex items-center gap-1.5">
+                                    <span class="w-3.5 h-1 bg-zinc-800 rounded-sm"></span>
+                                    <span class="text-zinc-600">Inactive Link</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Graph Canvas -->
+                        <div id="networkGraph" class="border border-zinc-800"></div>
+
+                        <!-- Graph Footer Meta -->
+                        <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-900 text-[11px] font-mono text-zinc-500 text-center">
+                            <div>Transit Path A: Coal (820) / Gas (490)</div>
+                            <div>Transit Path B: Mixed (350) / Hydro (70)</div>
+                            <div>Transit Path C: Solar (45)</div>
+                        </div>
+                    </div>
+
+                    <!-- Metric Comparison Cards -->
+                    <div v-if="routeData" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                        <!-- Baseline Card -->
+                        <div class="bg-zinc-950 border border-zinc-800/90 rounded-md p-4">
+                            <div class="flex items-center justify-between pb-2 mb-3 border-b border-zinc-800">
+                                <div class="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">Baseline (Dijkstra)</div>
+                                <span class="text-[11px] font-mono text-zinc-600">Latency-Min</span>
+                            </div>
+                            <div class="font-mono text-xs text-zinc-300 bg-zinc-900/80 px-2.5 py-1.5 rounded border border-zinc-800 mb-3">
+                                {{ formatPath(routeData.baseline?.path) }}
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center font-mono">
+                                <div class="bg-zinc-900/40 p-2 rounded border border-zinc-800/60">
+                                    <div class="text-[11px] text-zinc-500 mb-0.5">Latency</div>
+                                    <div class="text-xs font-bold text-zinc-200">{{ routeData.baseline?.total_latency_ms }} ms</div>
+                                </div>
+                                <div class="bg-zinc-900/40 p-2 rounded border border-zinc-800/60">
+                                    <div class="text-[11px] text-zinc-500 mb-0.5">Energy</div>
+                                    <div class="text-xs font-bold text-zinc-200">{{ routeData.baseline?.total_energy_joules }} mJ</div>
+                                </div>
+                                <div class="bg-zinc-900/40 p-2 rounded border border-zinc-800/60">
+                                    <div class="text-[11px] text-zinc-500 mb-0.5">Carbon</div>
+                                    <div class="text-xs font-bold text-zinc-200">{{ routeData.baseline?.total_carbon_gco2 }} mg</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CarbonRoute Card -->
+                        <div class="bg-zinc-950 border border-zinc-700/80 rounded-md p-4">
+                            <div class="flex items-center justify-between pb-2 mb-3 border-b border-zinc-800">
+                                <div class="text-xs font-bold uppercase tracking-wider text-white font-mono">CarbonRoute Engine</div>
+                                <span class="text-[11px] font-mono text-zinc-400">Multi-Objective</span>
+                            </div>
+                            <div class="font-mono text-xs text-white bg-zinc-900 px-2.5 py-1.5 rounded border border-zinc-700 mb-3">
+                                {{ formatPath(routeData.carbonroute?.path) }}
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center font-mono">
+                                <div class="bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                                    <div class="text-[11px] text-zinc-400 mb-0.5">Latency</div>
+                                    <div class="text-xs font-bold text-white">{{ routeData.carbonroute?.total_latency_ms }} ms</div>
+                                </div>
+                                <div class="bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                                    <div class="text-[11px] text-zinc-400 mb-0.5">Energy</div>
+                                    <div class="text-xs font-bold text-white">{{ routeData.carbonroute?.total_energy_joules }} mJ</div>
+                                </div>
+                                <div class="bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                                    <div class="text-[11px] text-zinc-400 mb-0.5">Carbon</div>
+                                    <div class="text-xs font-bold text-white">{{ routeData.carbonroute?.total_carbon_gco2 }} mg</div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Evaluation Summary Banner -->
+                    <div v-if="routeData && routeData.baseline && routeData.carbonroute"
+                         class="bg-zinc-950 border border-zinc-800 rounded-md p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div>
+                            <div class="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono">Operational Delta</div>
+                            <div class="text-xs text-zinc-500 mt-0.5">Tradeoff analysis relative to single-objective shortest path</div>
+                        </div>
+                        <div class="flex items-center gap-6 font-mono text-center">
+                            <div>
+                                <div class="text-sm font-bold text-white">
+                                    -{{ Math.max(0, carbonDelta).toFixed(1) }}%
+                                </div>
+                                <div class="text-[10px] text-zinc-500 uppercase">Carbon Reduction</div>
+                            </div>
+                            <div class="h-6 w-[1px] bg-zinc-800"></div>
+                            <div>
+                                <div class="text-sm font-bold text-zinc-300">
+                                    {{ energyDelta <= 0 ? '-' : '+' }}{{ Math.abs(energyDelta).toFixed(1) }}%
+                                </div>
+                                <div class="text-[10px] text-zinc-500 uppercase">Energy Delta</div>
+                            </div>
+                            <div class="h-6 w-[1px] bg-zinc-800"></div>
+                            <div>
+                                <div class="text-sm font-bold text-zinc-300">
+                                    +{{ Math.max(0, latencyDelta).toFixed(1) }}%
+                                </div>
+                                <div class="text-[10px] text-zinc-500 uppercase">Latency Penalty</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TAB 2: EXPERIMENT BENCHMARKS -->
+        <div v-show="activeTab === 'experiments'" class="space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-zinc-800 gap-3">
+                <div>
+                    <h2 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Automated Benchmark Matrix</h2>
+                    <p class="text-xs text-zinc-500 mt-0.5">Cross-evaluation across 4 network traffic scenarios and 3 optimization profiles</p>
+                </div>
+                <button @click="runBenchmark" :disabled="benchmarkLoading"
+                        class="px-4 py-2 bg-white hover:bg-zinc-200 disabled:bg-zinc-800 disabled:text-zinc-600 text-black text-xs font-semibold rounded font-mono transition">
+                    {{ benchmarkLoading ? 'Computing Matrix...' : 'Execute Full Benchmark' }}
+                </button>
+            </div>
+
+            <div v-if="benchmarkData" class="space-y-6">
+                <div v-for="(res, sKey) in benchmarkData.scenarios" :key="sKey"
+                     class="bg-zinc-950 border border-zinc-800 rounded-md overflow-hidden">
+                    <div class="px-5 py-2.5 bg-zinc-900/60 border-b border-zinc-800 flex justify-between items-center font-mono">
+                        <div>
+                            <span class="text-xs font-bold text-white uppercase tracking-wider">{{ res.scenario.label }}</span>
+                            <span class="text-xs text-zinc-500 ml-3">{{ res.scenario.description }}</span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-zinc-950 border-b border-zinc-800 text-zinc-500 font-mono">
+                                <tr>
+                                    <th class="py-2.5 px-4 font-semibold">Profile</th>
+                                    <th class="py-2.5 px-4 font-semibold">Algorithm</th>
+                                    <th class="py-2.5 px-4 font-semibold">Computed Route</th>
+                                    <th class="py-2.5 px-4 text-right font-semibold">Latency (ms)</th>
+                                    <th class="py-2.5 px-4 text-right font-semibold">Energy (mJ)</th>
+                                    <th class="py-2.5 px-4 text-right font-semibold">Carbon (mg)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-900 font-mono">
+                                <template v-for="comp in res.comparisons" :key="comp.profile">
+                                    <tr class="hover:bg-zinc-900/30">
+                                        <td class="py-2.5 px-4 font-bold text-zinc-300" rowspan="2">{{ comp.profile }}</td>
+                                        <td class="py-2.5 px-4 text-zinc-500">Baseline</td>
+                                        <td class="py-2.5 px-4 text-zinc-400">{{ formatPath(comp.baseline?.path) }}</td>
+                                        <td class="py-2.5 px-4 text-right text-zinc-400">{{ comp.baseline?.total_latency_ms }}</td>
+                                        <td class="py-2.5 px-4 text-right text-zinc-400">{{ comp.baseline?.total_energy_joules }}</td>
+                                        <td class="py-2.5 px-4 text-right text-zinc-400">{{ comp.baseline?.total_carbon_gco2 }}</td>
+                                    </tr>
+                                    <tr class="hover:bg-zinc-900/50 bg-zinc-900/20">
+                                        <td class="py-2.5 px-4 text-white font-semibold">CarbonRoute</td>
+                                        <td class="py-2.5 px-4 text-white font-semibold">{{ formatPath(comp.carbonroute?.path) }}</td>
+                                        <td class="py-2.5 px-4 text-right text-white">{{ comp.carbonroute?.total_latency_ms }}</td>
+                                        <td class="py-2.5 px-4 text-right text-white">{{ comp.carbonroute?.total_energy_joules }}</td>
+                                        <td class="py-2.5 px-4 text-right text-white font-bold">{{ comp.carbonroute?.total_carbon_gco2 }}</td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else class="text-center py-16 bg-zinc-950 border border-dashed border-zinc-800 rounded-md">
+                <p class="text-xs font-mono text-zinc-500">Select "Execute Full Benchmark" to evaluate all 12 scenario-profile permutations.</p>
+            </div>
+        </div>
+
+        <!-- TAB 3: CANDIDATE PATH ANALYSIS -->
+        <div v-show="activeTab === 'analysis'" class="space-y-6">
+            <div class="pb-4 border-b border-zinc-800">
+                <h2 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Candidate Path Telemetry</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">Comprehensive per-hop cost metrics for every simple path connecting ingress to egress</p>
+            </div>
+
+            <div v-if="routeData && routeData.all_paths" class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div v-for="(p, idx) in routeData.all_paths" :key="idx"
+                     class="bg-zinc-950 border border-zinc-800 rounded-md p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-mono font-bold text-zinc-200">Transit Corridor {{ String.fromCharCode(65 + idx) }}</span>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded border border-zinc-800 text-zinc-500">
+                                {{ p.path.length - 1 }} hops
+                            </span>
+                        </div>
+                        <div class="font-mono text-xs text-zinc-300 bg-zinc-900 p-2.5 rounded border border-zinc-800 mb-4 leading-relaxed">
+                            {{ formatPath(p.path) }}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 text-center font-mono">
+                        <div class="bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                            <div class="text-[10px] text-zinc-500 mb-0.5">Latency</div>
+                            <div class="text-xs font-bold text-zinc-300">{{ p.total_latency_ms }} ms</div>
+                        </div>
+                        <div class="bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                            <div class="text-[10px] text-zinc-500 mb-0.5">Energy</div>
+                            <div class="text-xs font-bold text-zinc-300">{{ p.total_energy_joules }} mJ</div>
+                        </div>
+                        <div class="bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                            <div class="text-[10px] text-zinc-500 mb-0.5">Carbon</div>
+                            <div class="text-xs font-bold text-white">{{ p.total_carbon_gco2 }} mg</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else class="text-center py-16 bg-zinc-950 border border-dashed border-zinc-800 rounded-md">
+                <p class="text-xs font-mono text-zinc-500">Path analysis requires initial data fetch from routing engine.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-zinc-950 border-t border-zinc-900 px-6 py-3 text-xs text-zinc-600 text-center font-mono">
+        Computer Networks Course Project — Software-Defined Multi-Objective Routing
+    </footer>
+
+</div>
+
+<script>
+const { createApp } = Vue;
+const API = '';
+
+createApp({
+    data() {
+        return {
+            activeTab: 'dashboard',
+            alphaInt: 33,
+            betaInt: 33,
+            currentPreset: 'balanced',
+            selectedScenario: 'normal',
+            routeData: null,
+            benchmarkData: null,
+            benchmarkLoading: false,
+            networkVis: null,
+            nodesDataSet: null,
+            edgesDataSet: null,
+            scenarios: {
+                normal: {
+                    label: "Nominal Load",
+                    description: "Standard link utilization across all transit corridors (10-35%)."
+                },
+                path_a_congested: {
+                    label: "Path A Congested",
+                    description: "High queue contention on direct high-speed corridor (s1-s2-s5)."
+                },
+                path_b_congested: {
+                    label: "Path B Congested",
+                    description: "High queue contention on secondary corridor (s1-s3-s6)."
+                },
+                multi_congestion: {
+                    label: "Multi-Corridor Congestion",
+                    description: "Heavy contention simultaneously on Path A and Path B."
+                }
+            }
+        }
+    },
+    computed: {
+        alpha() { return this.alphaInt / 100; },
+        beta() { return this.betaInt / 100; },
+        gamma() { return Math.max(0, 1 - this.alpha - this.beta); },
+        carbonDelta() {
+            if (!this.routeData?.baseline || !this.routeData?.carbonroute) return 0;
+            const b = this.routeData.baseline.total_carbon_gco2;
+            const c = this.routeData.carbonroute.total_carbon_gco2;
+            return b > 0 ? ((b - c) / b) * 100 : 0;
+        },
+        energyDelta() {
+            if (!this.routeData?.baseline || !this.routeData?.carbonroute) return 0;
+            const b = this.routeData.baseline.total_energy_joules;
+            const c = this.routeData.carbonroute.total_energy_joules;
+            return b > 0 ? ((c - b) / b) * 100 : 0;
+        },
+        latencyDelta() {
+            if (!this.routeData?.baseline || !this.routeData?.carbonroute) return 0;
+            const b = this.routeData.baseline.total_latency_ms;
+            const c = this.routeData.carbonroute.total_latency_ms;
+            return b > 0 ? ((c - b) / b) * 100 : 0;
+        }
+    },
+    mounted() {
+        this.initTopologyCanvas();
+        this.computeRoute();
+    },
+    methods: {
+        switchTab(tab) {
+            this.activeTab = tab;
+            if (tab === 'dashboard' && this.networkVis) {
+                this.$nextTick(() => {
+                    this.networkVis.redraw();
+                    this.networkVis.fit({ animation: false });
+                });
+            }
+        },
+        formatPath(p) {
+            if (!p || !Array.isArray(p)) return 'N/A';
+            return ['h1', ...p, 'h2'].join(' -> ');
+        },
+        applyPreset(name) {
+            this.currentPreset = name;
+            const table = {
+                performance: [80, 15],
+                balanced: [40, 30],
+                green: [10, 30]
+            };
+            if (table[name]) {
+                [this.alphaInt, this.betaInt] = table[name];
+                this.computeRoute();
+            }
+        },
+        onSliderChange(changed) {
+            if (this.alphaInt + this.betaInt > 100) {
+                if (changed === 'alpha') {
+                    this.betaInt = 100 - this.alphaInt;
+                } else {
+                    this.alphaInt = 100 - this.betaInt;
+                }
+            }
+            this.currentPreset = '';
+            this.computeRoute();
+        },
+        async computeRoute() {
+            try {
+                const res = await fetch(`${API}/api/v1/routes/compute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        alpha: this.alpha,
+                        beta: this.beta,
+                        gamma: this.gamma,
+                        scenario: this.selectedScenario
+                    })
+                });
+                this.routeData = await res.json();
+                this.updateTopologyHighlighting();
+            } catch (err) {
+                console.error("Route computation failed:", err);
+            }
+        },
+        async refreshNetworkTraffic() {
+            try {
+                await fetch(`${API}/api/v1/metrics/refresh`, { method: 'POST' });
+                this.computeRoute();
+            } catch (err) {
+                console.error("Traffic regeneration error:", err);
+            }
+        },
+        async runBenchmark() {
+            this.benchmarkLoading = true;
+            try {
+                const res = await fetch(`${API}/api/v1/experiments/benchmark`, { method: 'POST' });
+                this.benchmarkData = await res.json();
+            } catch (err) {
+                console.error("Benchmark failed:", err);
+            } finally {
+                this.benchmarkLoading = false;
+            }
+        },
+        initTopologyCanvas() {
+            const coords = {
+                h1: { x: -380, y: 0 },
+                s1: { x: -220, y: 0 },
+                s2: { x: -20, y: -110 },
+                s3: { x: -20, y: 0 },
+                s4: { x: -20, y: 110 },
+                s5: { x: 180, y: -110 },
+                s6: { x: 180, y: 0 },
+                s7: { x: 320, y: 0 },
+                h2: { x: 460, y: 0 }
+            };
+
+            this.nodesDataSet = new vis.DataSet([
+                { id: 'h1', label: 'Host 1\n10.0.0.1', shape: 'box', color: '#18181b', font: { color: '#ffffff', face: 'monospace', size: 11 }, margin: 8, ...coords.h1, fixed: true },
+                { id: 's1', label: 's1 [Ingress]\nMixed Grid', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s1, fixed: true },
+                { id: 's2', label: 's2 [Coal]\n820 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s2, fixed: true },
+                { id: 's3', label: 's3 [Mixed]\n350 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s3, fixed: true },
+                { id: 's4', label: 's4 [Solar]\n45 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s4, fixed: true },
+                { id: 's5', label: 's5 [Gas]\n490 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s5, fixed: true },
+                { id: 's6', label: 's6 [Hydro]\n70 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s6, fixed: true },
+                { id: 's7', label: 's7 [Egress]\nNuclear Grid', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s7, fixed: true },
+                { id: 'h2', label: 'Host 2\n10.0.0.2', shape: 'box', color: '#18181b', font: { color: '#ffffff', face: 'monospace', size: 11 }, margin: 8, ...coords.h2, fixed: true }
+            ]);
+
+            this.edgesDataSet = new vis.DataSet([
+                { id: 'h1-s1', from: 'h1', to: 's1', color: { color: '#27272a' }, width: 1.5, dashes: true },
+                { id: 's1-s2', from: 's1', to: 's2', color: { color: '#27272a' }, width: 1.5, label: '1Gbps | 1ms', font: { color: '#71717a', size: 10, align: 'top' } },
+                { id: 's1-s3', from: 's1', to: 's3', color: { color: '#27272a' }, width: 1.5, label: '500M | 3ms', font: { color: '#71717a', size: 10, align: 'top' } },
+                { id: 's1-s4', from: 's1', to: 's4', color: { color: '#27272a' }, width: 1.5, label: '200M | 5ms', font: { color: '#71717a', size: 10, align: 'top' } },
+                { id: 's2-s5', from: 's2', to: 's5', color: { color: '#27272a' }, width: 1.5, label: '1Gbps | 1ms', font: { color: '#71717a', size: 10, align: 'top' } },
+                { id: 's3-s6', from: 's3', to: 's6', color: { color: '#27272a' }, width: 1.5, label: '500M | 3ms', font: { color: '#71717a', size: 10, align: 'top' } },
+                { id: 's5-s7', from: 's5', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '1Gbps | 1ms', font: { color: '#71717a', size: 10, align: 'top' } },
+                { id: 's6-s7', from: 's6', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '500M | 3ms', font: { color: '#71717a', size: 10, align: 'top' } },
+                { id: 's4-s7', from: 's4', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '200M | 5ms', font: { color: '#71717a', size: 10, align: 'top' } },
+                { id: 's7-h2', from: 's7', to: 'h2', color: { color: '#27272a' }, width: 1.5, dashes: true }
+            ]);
+
+            const container = document.getElementById('networkGraph');
+            const data = { nodes: this.nodesDataSet, edges: this.edgesDataSet };
+            const options = {
+                physics: false,
+                interaction: {
+                    dragNodes: false,
+                    dragView: true,
+                    zoomView: true
+                }
+            };
+
+            this.networkVis = new vis.Network(container, data, options);
+
+            setTimeout(() => {
+                this.networkVis.fit({ animation: false });
+            }, 100);
+        },
+        updateTopologyHighlighting() {
+            if (!this.routeData || !this.edgesDataSet) return;
+
+            const baseSwitches = this.routeData.baseline?.path || [];
+            const carbonSwitches = this.routeData.carbonroute?.path || [];
+
+            const baseFull = ['h1', ...baseSwitches, 'h2'];
+            const carbonFull = ['h1', ...carbonSwitches, 'h2'];
+
+            const allEdges = this.edgesDataSet.get();
+            const edgeUpdates = allEdges.map(e => ({
+                id: e.id,
+                color: { color: '#27272a' },
+                width: 1.5,
+                dashes: e.id === 'h1-s1' || e.id === 's7-h2'
+            }));
+
+            const applyHighlight = (path, colorHex, widthPx, isDashed = false) => {
+                for (let i = 0; i < path.length - 1; i++) {
+                    const u = path[i];
+                    const v = path[i + 1];
+                    const match = edgeUpdates.find(e =>
+                        (e.id === `${u}-${v}`) || (e.id === `${v}-${u}`)
+                    );
+                    if (match) {
+                        match.color = { color: colorHex };
+                        match.width = widthPx;
+                        if (isDashed) match.dashes = [4, 4];
+                    }
+                }
+            };
+
+            // Monochrome: Baseline in medium gray dashed (#71717a), CarbonRoute in solid bright white (#ffffff)
+            applyHighlight(baseFull, '#71717a', 2.5, true);
+            applyHighlight(carbonFull, '#ffffff', 3.5, false);
+
+            this.edgesDataSet.update(edgeUpdates);
+
+            // Node borders: active CarbonRoute nodes get solid white border
+            const allNodes = this.nodesDataSet.get();
+            const nodeUpdates = allNodes.map(n => {
+                const isActive = carbonFull.includes(n.id);
+                return {
+                    id: n.id,
+                    color: {
+                        background: '#18181b',
+                        border: isActive ? '#ffffff' : '#27272a'
+                    },
+                    borderWidth: isActive ? 2 : 1
+                };
+            });
+            this.nodesDataSet.update(nodeUpdates);
+        }
+    }
+}).mount('#app');
+</script>
+</body>
+</html>

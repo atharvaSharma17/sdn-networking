@@ -1,933 +1,179 @@
-# CarbonRoute — High-Level Design
+# CarbonRoute: High-Level Design Document
 
-## 1. Overview
+## 1. Executive Summary
 
-CarbonRoute is a **Software-Defined Networking (SDN) based routing framework** that selects network paths by jointly considering:
+CarbonRoute is a Software-Defined Networking (SDN) routing framework that selects network paths by jointly optimizing three core metrics:
 
-* End-to-end latency
-* Network energy consumption
-* Carbon intensity and estimated carbon emissions
+1. End-to-end transmission latency (Quality of Service)
+2. Network hardware energy consumption (derived from switch utilization and port activity)
+3. Estimated carbon footprint (derived from energy consumption and regional power grid emission factors)
 
-Traditional routing algorithms primarily optimize metrics such as hop count or shortest latency. CarbonRoute extends this approach by introducing a configurable multi-objective routing model that evaluates the environmental impact of network paths alongside Quality of Service (QoS).
-
-The system uses an SDN architecture where the routing decision logic is separated from the low-level network control layer.
+Traditional routing protocols (such as OSPF, IS-IS, and standard Dijkstra implementations) evaluate shortest-path metrics solely through hop counts or link delays. CarbonRoute introduces a multi-objective cost formulation that integrates environmental impact metrics directly into the routing decision plane.
 
 ---
 
-## 2. System Goals
+## 2. Technical Stack and Dependencies
 
-CarbonRoute aims to:
+The system is implemented as a modular Python-based architecture:
 
-1. Build a network with multiple possible paths between hosts.
-2. Collect network performance metrics from the SDN environment.
-3. Estimate energy consumption for network links and switches.
-4. Calculate estimated carbon emissions based on energy consumption and carbon intensity.
-5. Compute routes using a multi-objective cost function.
-6. Compare CarbonRoute against conventional shortest-path routing.
-7. Dynamically update routing decisions when network conditions change.
-8. Visualize network state, selected routes, and experimental results.
 
----
+| Subsystem               | Technology                     | Source Location    |
+| ------------------------- | -------------------------------- | -------------------- |
+| Network Data Plane Sim  | Python 3, NetworkX Graph Model | `src/simulator/`   |
+| Routing Engine          | Dijkstra, Multi-Objective Norm | `src/routing/`     |
+| Experiment Orchestrator | Python Benchmark Runner        | `src/experiments/` |
+| Application API Layer   | FastAPI, Uvicorn               | `src/backend/`     |
+| Web Telemetry Console   | Vue.js 3, Tailwind CSS, Vis.js | `src/frontend/`    |
 
-## 3. Technology Stack
-
-| Layer             | Technology              |
-| ----------------- | ----------------------- |
-| Frontend          | Next.js + TypeScript    |
-| Backend           | Go                      |
-| HTTP Framework    | Echo                    |
-| Routing Engine    | Go                      |
-| SDN Controller    | Python + Ryu            |
-| Network Emulator  | Mininet                 |
-| Virtual Switches  | Open vSwitch            |
-| Network Protocol  | OpenFlow                |
-| Database          | PostgreSQL              |
-| Real-Time Updates | WebSocket               |
-| Containerization  | Docker / Docker Compose |
+Runtime dependencies: `fastapi`, `uvicorn`, `networkx`.
 
 ---
 
-# 4. High-Level Architecture
+## 3. Subsystem Architecture
 
-The system is divided into five major layers:
+The system operates across three decoupled planes:
 
-1. **Presentation Layer**
-2. **Application and Decision Layer**
-3. **SDN Control Layer**
-4. **Network Emulation Layer**
-5. **Persistence Layer**
-
-```mermaid
-flowchart TB
-
-    User["User"]
-
-    subgraph Presentation["Presentation Layer"]
-        FE["Next.js Dashboard"]
-    end
-
-    subgraph Backend["Application & Decision Layer — Go"]
-        API["API Layer<br/>Echo"]
-        Routing["Routing Engine"]
-        Metrics["Metrics Service"]
-        Energy["Energy Model"]
-        Carbon["Carbon Model"]
-        Experiment["Experiment Service"]
-        WS["WebSocket Hub"]
-        SDNClient["SDN Client"]
-    end
-
-    subgraph Persistence["Persistence Layer"]
-        DB[("PostgreSQL")]
-    end
-
-    subgraph Control["SDN Control Layer"]
-        Ryu["Ryu Controller<br/>Python"]
-    end
-
-    subgraph Network["Network Emulation Layer"]
-        Mininet["Mininet Network"]
-        OVS["Open vSwitches"]
-        Hosts["Virtual Hosts"]
-    end
-
-    User --> FE
-
-    FE -->|REST API| API
-    API --> Routing
-    API --> Experiment
-    API --> Metrics
-
-    Routing --> Energy
-    Routing --> Carbon
-
-    Metrics --> Energy
-    Metrics --> Carbon
-
-    Routing --> SDNClient
-    SDNClient -->|HTTP| Ryu
-
-    Ryu -->|OpenFlow| OVS
-    OVS --> Hosts
-    Mininet --> OVS
-
-    Metrics -->|Network Statistics| Ryu
-
-    Metrics --> DB
-    Experiment --> DB
-    Routing --> DB
-
-    WS --> FE
-    Metrics --> WS
-    Routing --> WS
 ```
+[ Management & Visualization Console ]
+      (Vue.js 3 / Tailwind CSS / Vis.js Canvas)
+                       |
+                       | REST API (JSON over HTTP)
+                       v
+[ Application & Decision Plane ]
+      (FastAPI Server / In-Memory Graph Orchestrator)
+         |                             |
+         v                             v
+[ Routing Computation Engine ]   [ SDN Network Simulator ]
+  - Baseline Dijkstra Solver       - 7-Switch Mesh Topology
+  - CarbonRoute Composite Solver   - Dynamic M/M/1 Queuing Delay
+  - Min-Max Feature Normalizer     - Regional Grid Carbon Factor
+```
+
+### 3.1 Network Simulator (`src/simulator/`)
+
+Represents the emulated SDN data plane. Switches and links maintain real-time operational states:
+
+- **Switches:** Parameterized by idle power consumption (Watts), maximum load power consumption (Watts), and regional power grid assignment.
+- **Links:** Parameterized by bandwidth capacity (Mbps), base physical propagation delay (ms), and dynamic link utilization (0.0 to 1.0).
+- **Queuing Model:** Uses an M/M/1 queuing approximation where effective latency increases asymptotically as link utilization approaches capacity.
+
+### 3.2 Routing Engine (`src/routing/`)
+
+Evaluates candidate paths between ingress switch `s1` and egress switch `s7`. Supports two distinct algorithmic paths:
+
+- **Baseline Dijkstra:** Solves for path minimizing link latency only.
+- **CarbonRoute:** Solves for path minimizing composite weighted cost.
+
+### 3.3 Application Backend (`src/backend/`)
+
+Provides REST endpoints enabling external controllers and dashboards to query topology structure, trigger re-routing calculations, and execute benchmark suites.
 
 ---
 
-# 5. Architectural Responsibilities
+## 4. Algorithmic Formulation
 
-## 5.1 Next.js Dashboard
+### 4.1 Multi-Objective Cost Function
 
-The frontend provides a visual interface for interacting with CarbonRoute.
+For each directed network edge $e = (u, v)$, the composite cost is calculated as:
 
-### Responsibilities
+$$
+\text{Cost}(e) = \alpha \cdot \hat{L}(e) + \beta \cdot \hat{E}(e) + \gamma \cdot \hat{C}(e)
 
-* Display network topology.
-* Display the currently selected route.
-* Show latency, energy, and carbon metrics.
-* Configure optimization weights.
-* Start experiments.
-* Compare CarbonRoute against shortest-path routing.
-* Receive live updates through WebSockets.
+$$
 
-### Major Screens
+Subject to:
 
-```text
-Dashboard
-│
-├── Network Overview
-│   ├── Live Topology
-│   ├── Selected Route
-│   └── Network Health
-│
-├── Route Optimizer
-│   ├── Source/Destination
-│   ├── Optimization Weights
-│   └── Route Comparison
-│
-├── Experiment Lab
-│   ├── Scenario Selection
-│   ├── Algorithm Selection
-│   └── Experiment Execution
-│
-└── Results
-    ├── Latency Comparison
-    ├── Energy Comparison
-    ├── Carbon Comparison
-    └── Throughput Comparison
-```
+$$
+\alpha + \beta + \gamma = 1.0, \quad \alpha, \beta, \gamma \ge 0
 
----
+$$
 
-## 5.2 Go Backend
+Where $\hat{L}(e)$, $\hat{E}(e)$, and $\hat{C}(e)$ represent min-max normalized values of link latency, energy consumption, and carbon emissions across all active topology edges:
 
-The Go backend acts as the primary **application and decision layer**.
+$$
+\hat{X}(e) = \frac{X(e) - X_{\min}}{X_{\max} - X_{\min}}
 
-It does not directly control OpenFlow switches.
+$$
 
-Instead, it:
+### 4.2 Power and Energy Model
 
-```text
-Collects network state
-        ↓
-Builds network graph
-        ↓
-Calculates routing metrics
-        ↓
-Runs optimization algorithm
-        ↓
-Selects optimal path
-        ↓
-Sends selected path to Ryu
-```
+Switch power dissipation follows a linear model based on forwarding utilization $u$:
 
-### Major Components
+$$
+P(u) = P_{\text{idle}} + u \cdot (P_{\text{max}} - P_{\text{idle}})
 
-```mermaid
-flowchart LR
+$$
 
-    API["API Layer"]
+Per-packet forwarding energy for traversing link $(u, v)$ is formulated as:
 
-    subgraph Services["Application Services"]
-        Topology["Topology Service"]
-        Routing["Routing Service"]
-        Metrics["Metrics Service"]
-        Experiment["Experiment Service"]
-    end
+$$
+E(u, v) = \frac{P(u) + P(v)}{2} \cdot (0.10 + 0.20 \cdot u_{\text{link}}) \quad [\text{mJ}]
 
-    subgraph Optimization["Optimization Layer"]
-        Dijkstra["Shortest Path"]
-        CarbonRoute["CarbonRoute Algorithm"]
-        Normalizer["Metric Normalization"]
-    end
+$$
 
-    subgraph Models["Environmental Models"]
-        Energy["Energy Model"]
-        Carbon["Carbon Model"]
-    end
+### 4.3 Carbon Emission Model
 
-    API --> Topology
-    API --> Routing
-    API --> Metrics
-    API --> Experiment
+Carbon emissions are calculated by mapping the egress switch to its regional power grid carbon intensity factor:
 
-    Routing --> Dijkstra
-    Routing --> CarbonRoute
+$$
+C(u, v) = E(u, v) \cdot \left(\frac{I_{\text{region}}}{100.0}\right) \quad [\text{mgCO}_2\text{eq}]
 
-    CarbonRoute --> Normalizer
-    CarbonRoute --> Energy
-    CarbonRoute --> Carbon
-```
+$$
+
+Standard carbon intensity factors applied:
+
+- Coal-dominant grid: 820 $\text{gCO}_2/\text{kWh}$
+- Natural gas grid: 490 $\text{gCO}_2/\text{kWh}$
+- Regional mixed grid: 350 $\text{gCO}_2/\text{kWh}$
+- Hydroelectric dominant: 70 $\text{gCO}_2/\text{kWh}$
+- Solar/renewable dominant: 45 $\text{gCO}_2/\text{kWh}$
+- Nuclear dominant: 12 $\text{gCO}_2/\text{kWh}$
 
 ---
 
-# 6. Core System Components
+## 5. Network Topology Design
 
-## 6.1 Topology Service
+The experimental topology consists of 7 OpenFlow-style switches connecting Host 1 (`10.0.0.1`) to Host 2 (`10.0.0.2`):
 
-The Topology Service maintains an in-memory representation of the SDN network.
-
-The topology is periodically retrieved from the Ryu controller.
-
-### Example Network
-
-```mermaid
-flowchart LR
-
-    H1((H1))
-
-    S1["Switch S1"]
-    S2["Switch S2"]
-    S3["Switch S3"]
-    S4["Switch S4"]
-    S5["Switch S5"]
-
-    H2((H2))
-
-    H1 --> S1
-
-    S1 --> S2
-    S1 --> S3
-
-    S2 --> S4
-    S3 --> S4
-
-    S4 --> S5
-
-    S5 --> H2
+```
+                 +-- s2 (Coal Grid) ---- s5 (Gas Grid) ---+
+   h1 --- s1 ----+                                        +---- s7 --- h2
+                 +-- s3 (Mixed Grid) --- s6 (Hydro Grid) -+
+                 |                                        |
+                 +-- s4 (Solar Grid) ---------------------+
 ```
 
-The topology is converted into a graph used by the routing engine.
+Candidate transit paths:
+
+1. **Path A (High Speed / High Carbon):** `s1 -> s2 -> s5 -> s7` (1000 Mbps capacity, ~3 ms base delay, high grid emission).
+2. **Path B (Balanced Transit):** `s1 -> s3 -> s6 -> s7` (500 Mbps capacity, ~9 ms base delay, moderate grid emission).
+3. **Path C (Low Emission Transit):** `s1 -> s4 -> s7` (200 Mbps capacity, ~10 ms base delay, clean renewable grid).
 
 ---
 
-## 6.2 Metrics Service
+## 6. Experimental Evaluation Methodology
 
-The Metrics Service periodically collects network statistics.
+The test suite evaluates 4 network traffic scenarios across 3 optimization profiles:
 
-### Collected Metrics
+### Scenarios
 
-| Metric      | Description                            |
-| ----------- | -------------------------------------- |
-| Latency     | Estimated or measured link delay       |
-| Throughput  | Traffic successfully transmitted       |
-| Utilization | Percentage of link capacity being used |
-| Packet Loss | Percentage of packets dropped          |
-| Bandwidth   | Available link capacity                |
+1. **Normal Network:** Baseline traffic conditions across all links (10-35% utilization).
+2. **Fast Path Congested:** 85% traffic load injected onto Path A (`s1-s2`, `s2-s5`).
+3. **Medium Path Congested:** 85% traffic load injected onto Path B (`s1-s3`, `s3-s6`).
+4. **Multi-Path Congestion:** Heavy load injected on both Path A and Path B.
 
-### Collection Flow
+### Profiles
 
-```mermaid
-sequenceDiagram
-
-    participant Collector as Go Metrics Service
-    participant Ryu as Ryu Controller
-    participant OVS as Open vSwitch
-
-    loop Every N Seconds
-        Collector->>Ryu: Request Network Statistics
-        Ryu->>OVS: Request Port/Flow Statistics
-        OVS-->>Ryu: Statistics
-        Ryu-->>Collector: Network Metrics
-    end
-```
-
-The collected data is used to update the network graph and calculate energy and carbon metrics.
+- **Performance-Optimized:** $\alpha = 0.80, \beta = 0.15, \gamma = 0.05$
+- **Balanced Profile:** $\alpha = 0.40, \beta = 0.30, \gamma = 0.30$
+- **Sustainability-First:** $\alpha = 0.10, \beta = 0.30, \gamma = 0.60$
 
 ---
 
-# 7. Routing Architecture
-
-CarbonRoute supports two routing strategies.
-
-## 7.1 Baseline Routing
-
-The baseline algorithm uses conventional shortest-path routing.
-
-```mermaid
-flowchart LR
-
-    A["Network Graph"]
-        --> B["Traditional Dijkstra"]
-        --> C["Shortest Path"]
-        --> D["Install Route"]
-```
-
-The baseline is used for comparison with CarbonRoute.
-
----
-
-## 7.2 CarbonRoute Routing
-
-CarbonRoute calculates an edge cost using normalized values of:
-
-* Latency
-* Energy
-* Carbon emissions
-
-### Cost Function
-
-```text
-Cost(e) =
-    α × L(e)
-  + β × E(e)
-  + γ × C(e)
-```
-
-Where:
-
-```text
-α = Latency Weight
-β = Energy Weight
-γ = Carbon Weight
-
-α + β + γ = 1
-```
-
-### Routing Pipeline
-
-```mermaid
-flowchart TD
-
-    Metrics["Current Network Metrics"]
-
-    Latency["Latency"]
-    Energy["Energy Consumption"]
-    Carbon["Carbon Emissions"]
-
-    Normalize["Normalize Metrics"]
-
-    Cost["Calculate Weighted Edge Cost"]
-
-    Graph["Weighted Network Graph"]
-
-    Algorithm["Modified Dijkstra"]
-
-    Route["Optimal Route"]
-
-    Metrics --> Latency
-    Metrics --> Energy
-    Metrics --> Carbon
-
-    Latency --> Normalize
-    Energy --> Normalize
-    Carbon --> Normalize
-
-    Normalize --> Cost
-    Cost --> Graph
-    Graph --> Algorithm
-    Algorithm --> Route
-```
-
----
-
-# 8. Energy and Carbon Calculation
-
-## 8.1 Energy Model
-
-Energy consumption is estimated using network utilization.
-
-```text
-P = P_idle + U × (P_max - P_idle)
-```
-
-Where:
-
-| Variable | Meaning                   |
-| -------- | ------------------------- |
-| `P`      | Current power consumption |
-| `P_idle` | Idle power consumption    |
-| `P_max`  | Maximum power consumption |
-| `U`      | Network utilization       |
-
-Energy consumed during a time interval:
-
-```text
-E = P × t
-```
-
----
-
-## 8.2 Carbon Model
-
-Estimated carbon emissions are calculated as:
-
-```text
-Carbon Emissions = Energy Consumption × Carbon Intensity
-```
-
-For a complete path:
-
-```text
-Path Carbon = Σ Carbon Emissions of Path Components
-```
-
-Carbon intensity can initially be simulated and dynamically modified during experiments.
-
----
-
-# 9. Route Installation Flow
-
-After the Go routing engine selects a path, the route must be installed in the network.
-
-```mermaid
-sequenceDiagram
-
-    participant User
-    participant FE as Next.js
-    participant Go as Go Backend
-    participant Route as Routing Engine
-    participant Ryu as Ryu Controller
-    participant OVS as Open vSwitch
-
-    User->>FE: Request Route
-
-    FE->>Go: POST /routes
-
-    Go->>Route: Calculate Optimal Path
-
-    Route-->>Go: Selected Path
-
-    Go->>Ryu: Install Path
-
-    Ryu->>OVS: Install OpenFlow Rules
-
-    OVS-->>Ryu: Rules Installed
-
-    Ryu-->>Go: Success
-
-    Go-->>FE: Route Information
-
-    FE-->>User: Display Selected Route
-```
-
----
-
-# 10. Dynamic Re-Routing
-
-CarbonRoute periodically re-evaluates the selected route.
-
-A route may be recalculated when:
-
-* Network latency increases.
-* Link utilization increases.
-* Energy consumption changes.
-* Carbon intensity changes.
-* The current path becomes significantly less optimal.
-
-```mermaid
-flowchart TD
-
-    Start["Periodic Evaluation"]
-
-    Collect["Collect Current Metrics"]
-
-    Update["Update Network Graph"]
-
-    Calculate["Calculate Current Route Cost"]
-
-    Alternative["Calculate Alternative Routes"]
-
-    Compare{"Is Alternative<br/>Significantly Better?"}
-
-    Keep["Keep Current Route"]
-
-    Reroute["Install New Route"]
-
-    Start --> Collect
-    Collect --> Update
-    Update --> Calculate
-    Calculate --> Alternative
-    Alternative --> Compare
-
-    Compare -->|No| Keep
-    Compare -->|Yes| Reroute
-```
-
-To prevent route flapping, a new route is only selected if its improvement exceeds a configurable threshold.
-
----
-
-# 11. Experiment Architecture
-
-The Experiment Service automates comparisons between algorithms.
-
-```mermaid
-flowchart TD
-
-    Config["Experiment Configuration"]
-
-    Scenario["Network Scenario"]
-
-    Algorithms["Select Algorithms"]
-
-    Run["Run Traffic"]
-
-    Collect["Collect Metrics"]
-
-    Store["Store Results"]
-
-    Analyze["Compare Results"]
-
-    Config --> Scenario
-    Config --> Algorithms
-
-    Scenario --> Run
-    Algorithms --> Run
-
-    Run --> Collect
-    Collect --> Store
-    Store --> Analyze
-```
-
----
-
-# 12. Experiment Scenarios
-
-The system will support the following scenarios.
-
-## Scenario 1 — Normal Network
-
-```text
-Stable latency
-Stable carbon intensity
-Normal traffic
-```
-
-Purpose:
-
-Compare baseline shortest-path routing with CarbonRoute under normal conditions.
-
----
-
-## Scenario 2 — High Carbon Path
-
-```text
-Shortest Path
-Carbon Intensity: High
-
-Alternative Path
-Carbon Intensity: Low
-```
-
-Expected behavior:
-
-```text
-CarbonRoute should select the cleaner path
-even if it has slightly higher latency.
-```
-
----
-
-## Scenario 3 — Network Congestion
-
-```text
-Traffic Load
-      ↓
-High Utilization
-      ↓
-Increased Latency
-      ↓
-Higher Energy Cost
-      ↓
-Route Re-evaluation
-```
-
----
-
-## Scenario 4 — Optimization Weight Analysis
-
-Three predefined optimization profiles are used.
-
-| Mode        | Latency | Energy | Carbon |
-| ----------- | ------: | -----: | -----: |
-| Performance |    0.70 |   0.20 |   0.10 |
-| Balanced    |    0.40 |   0.30 |   0.30 |
-| Green       |    0.15 |   0.35 |   0.50 |
-
-The experiment evaluates how changing priorities affects:
-
-* Latency
-* Energy consumption
-* Carbon emissions
-* Throughput
-* Packet loss
-
----
-
-# 13. Data Persistence
-
-PostgreSQL stores historical experiment and routing data.
-
-```mermaid
-erDiagram
-
-    EXPERIMENTS ||--o{ METRIC_SNAPSHOTS : contains
-    EXPERIMENTS ||--o{ ROUTE_DECISIONS : generates
-
-    EXPERIMENTS {
-        uuid id PK
-        string name
-        string topology
-        string algorithm
-        json optimization_config
-        timestamp started_at
-        timestamp completed_at
-    }
-
-    METRIC_SNAPSHOTS {
-        uuid id PK
-        uuid experiment_id FK
-        timestamp recorded_at
-        string source_node
-        string target_node
-        float latency_ms
-        float throughput_mbps
-        float utilization
-        float packet_loss
-        float energy_joules
-        float carbon_intensity
-        float carbon_emissions
-    }
-
-    ROUTE_DECISIONS {
-        uuid id PK
-        uuid experiment_id FK
-        string source
-        string destination
-        json selected_path
-        string algorithm
-        float total_cost
-        float latency_ms
-        float energy_joules
-        float carbon_emissions
-        timestamp created_at
-    }
-```
-
----
-
-# 14. Data Flow
-
-The complete data flow through CarbonRoute is:
-
-```mermaid
-flowchart LR
-
-    Mininet["Mininet Network"]
-
-    Ryu["Ryu Controller"]
-
-    Metrics["Metrics Service"]
-
-    Graph["Network Graph"]
-
-    Routing["Routing Engine"]
-
-    Flow["Flow Manager"]
-
-    DB[("PostgreSQL")]
-
-    UI["Next.js Dashboard"]
-
-    Mininet --> Ryu
-
-    Ryu --> Metrics
-
-    Metrics --> Graph
-
-    Graph --> Routing
-
-    Routing --> Flow
-
-    Flow --> Ryu
-
-    Metrics --> DB
-
-    Routing --> DB
-
-    DB --> UI
-
-    Routing --> UI
-```
-
----
-
-# 15. External Service Communication
-
-The system uses simple HTTP communication between the Go backend and Ryu controller.
-
-```mermaid
-flowchart LR
-
-    Go["Go Backend"]
-
-    Ryu["Ryu Controller"]
-
-    Go -->|GET /internal/topology| Ryu
-
-    Go -->|GET /internal/metrics| Ryu
-
-    Go -->|POST /internal/routes/install| Ryu
-
-    Go -->|POST /internal/routes/remove| Ryu
-```
-
-This keeps the SDN controller isolated from the application logic.
-
----
-
-# 16. API Boundaries
-
-## Frontend → Go Backend
-
-```text
-GET  /api/topology
-
-GET  /api/metrics
-
-GET  /api/routes/current
-
-POST /api/routes/calculate
-
-POST /api/optimization
-
-POST /api/experiments
-
-GET  /api/experiments/:id
-
-GET  /api/experiments/:id/results
-
-WS   /api/ws
-```
-
----
-
-## Go Backend → Ryu Controller
-
-```text
-GET  /internal/topology
-
-GET  /internal/metrics
-
-POST /internal/routes/install
-
-POST /internal/routes/remove
-```
-
----
-
-# 17. Deployment Architecture
-
-For development, the system runs as separate services.
-
-```mermaid
-flowchart TB
-
-    subgraph Application
-
-        Frontend["Frontend<br/>Next.js"]
-
-        Backend["Backend<br/>Go + Echo"]
-
-        Database[("PostgreSQL")]
-
-        Ryu["SDN Controller<br/>Ryu"]
-    end
-
-    subgraph NetworkEnvironment["Network Environment"]
-
-        Mininet["Mininet"]
-
-        OVS["Open vSwitch"]
-
-    end
-
-    Frontend --> Backend
-
-    Backend --> Database
-
-    Backend --> Ryu
-
-    Ryu --> OVS
-
-    Mininet --> OVS
-```
-
----
-
-# 18. Proposed Repository Structure
-
-```text
-carbonroute/
-
-├── frontend/
-│   ├── app/
-│   ├── components/
-│   ├── hooks/
-│   └── lib/
-│
-├── backend/
-│   ├── cmd/
-│   │   └── server/
-│   │       └── main.go
-│   │
-│   ├── internal/
-│   │   ├── api/
-│   │   ├── routing/
-│   │   ├── topology/
-│   │   ├── metrics/
-│   │   ├── energy/
-│   │   ├── carbon/
-│   │   ├── experiments/
-│   │   ├── sdn/
-│   │   ├── repository/
-│   │   └── websocket/
-│   │
-│   ├── migrations/
-│   └── Dockerfile
-│
-├── sdn-controller/
-│   ├── app.py
-│   ├── topology/
-│   ├── flows/
-│   ├── stats/
-│   └── api/
-│
-├── network/
-│   ├── topologies/
-│   └── traffic/
-│
-├── deployments/
-│   └── docker-compose.yml
-│
-├── docs/
-│   ├── HLD.md
-│   ├── LLD.md
-│   └── API.md
-│
-└── README.md
-```
-
----
-
-# 19. Design Decisions
-
-| Decision                | Rationale                                                                     |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| Go for backend          | Strong concurrency and clean systems programming                              |
-| Ryu for SDN             | Rapid OpenFlow and SDN development                                            |
-| Mininet                 | Controlled and reproducible network experiments                               |
-| PostgreSQL              | Persistent storage for experiments and metrics                                |
-| No Redis                | The current project does not require distributed caching or message brokering |
-| HTTP between Go and Ryu | Simple, debuggable service boundary                                           |
-| WebSocket for UI        | Real-time topology and metric updates                                         |
-| In-memory graph         | Fast path calculations using the latest network state                         |
-
----
-
-# 20. Final Architecture Summary
-
-CarbonRoute follows a clear separation of responsibilities:
-
-```text
-Next.js
-    │
-    │ Visualization + User Interaction
-    ▼
-Go Backend
-    │
-    ├── API Layer
-    ├── Metrics Collection
-    ├── Energy Calculation
-    ├── Carbon Calculation
-    ├── Routing Optimization
-    └── Experiment Management
-    │
-    │ Selected Path
-    ▼
-Ryu Controller
-    │
-    │ OpenFlow Rules
-    ▼
-Open vSwitch
-    │
-    ▼
-Mininet Network
-```
-
-The central architectural principle is:
-
-> **Go decides the optimal route. Ryu translates that decision into OpenFlow rules. Mininet executes and evaluates the resulting network behavior.**
-
-This separation allows CarbonRoute to independently evolve the routing algorithm, network controller, and visualization layers while maintaining a clear and testable system architecture.
+## 7. Team Contributions
+
+* **Naman Goyal (Core Developer):** Designed the multi-layer framework architecture. Formulated the composite cost function and normalization engine in Python. Developed the switch energy dissipation and regional carbon accounting models. Built the FastAPI backend routing endpoints, application schemas, and coordinated subsystem integration.
+* **Saiyam Kalra (Frontend Developer):** Built the web-based monitoring dashboard using Vue.js and Tailwind CSS. Implemented the network graph canvas utilizing Vis.js with real-time active route rendering.
+* **Arnav Kumar (Network Engineer):** Designed the 7-switch multi-path topology structure. Formulated link parameter definitions and queuing delay behavior under simulated link utilization.
+* **Ranjit Mohanty (Data Analyst & Research):** Researched real-world regional power grid carbon intensity datasets. Designed the experimental scenario matrix and structured automated benchmarking routines.
+* **Atharva Sharma (QA & Technical Documentation):** Authored the High-Level Design document and presentation deck. Executed integration test verification across the API and simulation pipelines.
