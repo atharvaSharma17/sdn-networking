@@ -591,7 +591,7 @@ createApp({
                 { id: 'h2', label: 'Host 2\n10.0.0.2', shape: 'box', color: '#18181b', font: { color: '#ffffff', face: 'monospace', size: 11 }, margin: 8, ...coords.h2, fixed: true }
             ]);
 
-            const ef = { color: '#71717a', size: 9, align: 'top' };
+            const ef = { color: '#71717a', size: 9, align: 'top', background: '#09090b' };
             this.edgesDataSet = new vis.DataSet([
                 // Host links
                 { id: 'h1-s1', from: 'h1', to: 's1', color: { color: '#27272a' }, width: 1.5, dashes: true },
@@ -606,18 +606,18 @@ createApp({
                 { id: 's3-s7', from: 's3', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '4G | 1.5ms', font: ef },
                 { id: 's4-s8', from: 's4', to: 's8', color: { color: '#27272a' }, width: 1.5, label: '3.5G | 1.5ms', font: ef },
                 { id: 's5-s9', from: 's5', to: 's9', color: { color: '#27272a' }, width: 1.5, label: '2.5G | 1.5ms', font: ef },
-                // Cross-links
-                { id: 's2-s7', from: 's2', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's3-s6', from: 's3', to: 's6', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's3-s8', from: 's3', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's4-s7', from: 's4', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's4-s9', from: 's4', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's5-s8', from: 's5', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                // Cross-links (shifted specific labels further to the left)
+                { id: 's2-s7', from: 's2', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '1.5G | 3ms                                   ', font: ef },
+                { id: 's3-s6', from: 's3', to: 's6', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '5G | 1ms                                   ', font: ef },
+                { id: 's3-s8', from: 's3', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2.5G | 2ms                                   ', font: ef },
+                { id: 's4-s7', from: 's4', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '3G | 2ms                                   ', font: ef },
+                { id: 's4-s9', from: 's4', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '1.5G | 2.5ms                                   ', font: ef },
+                { id: 's5-s8', from: 's5', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2G | 2.5ms                                   ', font: ef },
                 // Within-tier
-                { id: 's2-s3', from: 's2', to: 's3', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's3-s4', from: 's3', to: 's4', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's6-s7', from: 's6', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's8-s9', from: 's8', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's2-s3', from: 's2', to: 's3', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2G | 2ms', font: ef },
+                { id: 's3-s4', from: 's3', to: 's4', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '1.5G | 2.5ms', font: ef },
+                { id: 's6-s7', from: 's6', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2G | 2ms', font: ef },
+                { id: 's8-s9', from: 's8', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2G | 1.5ms', font: ef },
                 // Egress
                 { id: 's6-s10', from: 's6', to: 's10', color: { color: '#27272a' }, width: 1.5, label: '10G | 0.5ms', font: ef },
                 { id: 's7-s10', from: 's7', to: 's10', color: { color: '#27272a' }, width: 1.5, label: '5G | 1.5ms', font: ef },
