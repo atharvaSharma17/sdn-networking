@@ -29,18 +29,18 @@ SCENARIOS = {
     },
     "path_a_congested": {
         "label": "Fast Path Congested",
-        "description": "The fastest path (via s2→s5) is under heavy load.",
-        "congested_links": [("s1", "s2"), ("s2", "s5")],
+        "description": "The fastest path (via s2→s6) is under heavy load.",
+        "congested_links": [("s1", "s2"), ("s2", "s6")],
     },
     "path_b_congested": {
         "label": "Medium Path Congested",
-        "description": "The medium path (via s3→s6) is under heavy load.",
-        "congested_links": [("s1", "s3"), ("s3", "s6")],
+        "description": "The medium path (via s3→s7) is under heavy load.",
+        "congested_links": [("s1", "s3"), ("s3", "s7")],
     },
     "multi_congestion": {
         "label": "Multiple Path Congestion",
-        "description": "Both fast and medium paths are congested, forcing green path.",
-        "congested_links": [("s1", "s2"), ("s2", "s5"), ("s1", "s3"), ("s3", "s6")],
+        "description": "Both fast and medium paths are congested, forcing greener routing.",
+        "congested_links": [("s1", "s2"), ("s2", "s6"), ("s1", "s3"), ("s3", "s7")],
     },
 }
 

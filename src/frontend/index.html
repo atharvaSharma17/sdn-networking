@@ -206,10 +206,11 @@
                         <div id="networkGraph" class="border border-zinc-800"></div>
 
                         <!-- Graph Footer Meta -->
-                        <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-900 text-[11px] font-mono text-zinc-500 text-center">
-                            <div>Transit Path A: Coal (820) / Gas (490)</div>
-                            <div>Transit Path B: Mixed (350) / Hydro (70)</div>
-                            <div>Transit Path C: Solar (45)</div>
+                        <div class="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-zinc-900 text-[11px] font-mono text-zinc-500 text-center">
+                            <div>Corridor A: Coal (820) → Gas (490)</div>
+                            <div>Corridor B: Gas (490) → Mixed (350)</div>
+                            <div>Corridor C: Mixed (350) → Hydro (70)</div>
+                            <div>Corridor D: Hydro (70) → Solar (45)</div>
                         </div>
                     </div>
 
@@ -236,7 +237,7 @@
                                 </div>
                                 <div class="bg-zinc-900/40 p-2 rounded border border-zinc-800/60">
                                     <div class="text-[11px] text-zinc-500 mb-0.5">Carbon</div>
-                                    <div class="text-xs font-bold text-zinc-200">{{ routeData.baseline?.total_carbon_gco2 }} mg</div>
+                                    <div class="text-xs font-bold text-zinc-200">{{ routeData.baseline?.total_carbon_mgco2 }} mg</div>
                                 </div>
                             </div>
                         </div>
@@ -261,7 +262,7 @@
                                 </div>
                                 <div class="bg-zinc-900/60 p-2 rounded border border-zinc-800">
                                     <div class="text-[11px] text-zinc-400 mb-0.5">Carbon</div>
-                                    <div class="text-xs font-bold text-white">{{ routeData.carbonroute?.total_carbon_gco2 }} mg</div>
+                                    <div class="text-xs font-bold text-white">{{ routeData.carbonroute?.total_carbon_mgco2 }} mg</div>
                                 </div>
                             </div>
                         </div>
@@ -346,14 +347,14 @@
                                         <td class="py-2.5 px-4 text-zinc-400">{{ formatPath(comp.baseline?.path) }}</td>
                                         <td class="py-2.5 px-4 text-right text-zinc-400">{{ comp.baseline?.total_latency_ms }}</td>
                                         <td class="py-2.5 px-4 text-right text-zinc-400">{{ comp.baseline?.total_energy_joules }}</td>
-                                        <td class="py-2.5 px-4 text-right text-zinc-400">{{ comp.baseline?.total_carbon_gco2 }}</td>
+                                        <td class="py-2.5 px-4 text-right text-zinc-400">{{ comp.baseline?.total_carbon_mgco2 }}</td>
                                     </tr>
                                     <tr class="hover:bg-zinc-900/50 bg-zinc-900/20">
                                         <td class="py-2.5 px-4 text-white font-semibold">CarbonRoute</td>
                                         <td class="py-2.5 px-4 text-white font-semibold">{{ formatPath(comp.carbonroute?.path) }}</td>
                                         <td class="py-2.5 px-4 text-right text-white">{{ comp.carbonroute?.total_latency_ms }}</td>
                                         <td class="py-2.5 px-4 text-right text-white">{{ comp.carbonroute?.total_energy_joules }}</td>
-                                        <td class="py-2.5 px-4 text-right text-white font-bold">{{ comp.carbonroute?.total_carbon_gco2 }}</td>
+                                        <td class="py-2.5 px-4 text-right text-white font-bold">{{ comp.carbonroute?.total_carbon_mgco2 }}</td>
                                     </tr>
                                 </template>
                             </tbody>
@@ -400,7 +401,7 @@
                         </div>
                         <div class="bg-zinc-900/60 p-2 rounded border border-zinc-800">
                             <div class="text-[10px] text-zinc-500 mb-0.5">Carbon</div>
-                            <div class="text-xs font-bold text-white">{{ p.total_carbon_gco2 }} mg</div>
+                            <div class="text-xs font-bold text-white">{{ p.total_carbon_mgco2 }} mg</div>
                         </div>
                     </div>
                 </div>
@@ -440,22 +441,22 @@ createApp({
             edgesDataSet: null,
             scenarios: {
                 normal: {
-                    label: "Nominal Load",
-                    description: "Standard link utilization across all transit corridors (10-35%)."
+                    label: "Normal Network",
+                    description: "Baseline utilization across all links. Network is stable."
                 },
                 path_a_congested: {
                     label: "Path A Congested",
-                    description: "High queue contention on direct high-speed corridor (s1-s2-s5)."
+                    description: "High queue contention on direct high-speed corridor (s1-s2-s6)."
                 },
                 path_b_congested: {
                     label: "Path B Congested",
-                    description: "High queue contention on secondary corridor (s1-s3-s6)."
+                    description: "High queue contention on medium transit corridor (s1-s3-s7)."
                 },
                 multi_congestion: {
-                    label: "Multi-Corridor Congestion",
-                    description: "Heavy contention simultaneously on Path A and Path B."
+                    label: "Multiple Path Congestion",
+                    description: "Both fast (Path A) and medium (Path B) corridors are severely degraded."
                 }
-            }
+            },
         }
     },
     computed: {
@@ -464,8 +465,8 @@ createApp({
         gamma() { return Math.max(0, 1 - this.alpha - this.beta); },
         carbonDelta() {
             if (!this.routeData?.baseline || !this.routeData?.carbonroute) return 0;
-            const b = this.routeData.baseline.total_carbon_gco2;
-            const c = this.routeData.carbonroute.total_carbon_gco2;
+            const b = this.routeData.baseline.total_carbon_mgco2;
+            const c = this.routeData.carbonroute.total_carbon_mgco2;
             return b > 0 ? ((b - c) / b) * 100 : 0;
         },
         energyDelta() {
@@ -561,40 +562,67 @@ createApp({
         },
         initTopologyCanvas() {
             const coords = {
-                h1: { x: -380, y: 0 },
-                s1: { x: -220, y: 0 },
-                s2: { x: -20, y: -110 },
-                s3: { x: -20, y: 0 },
-                s4: { x: -20, y: 110 },
-                s5: { x: 180, y: -110 },
-                s6: { x: 180, y: 0 },
-                s7: { x: 320, y: 0 },
-                h2: { x: 460, y: 0 }
+                h1: { x: -500, y: 0 },
+                s1: { x: -300, y: 0 },
+                s2: { x: -100, y: -150 },
+                s3: { x: -100, y: -50 },
+                s4: { x: -100, y: 50 },
+                s5: { x: -100, y: 150 },
+                s6: { x: 140, y: -150 },
+                s7: { x: 140, y: -50 },
+                s8: { x: 140, y: 50 },
+                s9: { x: 140, y: 150 },
+                s10: { x: 320, y: 0 },
+                h2: { x: 500, y: 0 }
             };
 
             this.nodesDataSet = new vis.DataSet([
                 { id: 'h1', label: 'Host 1\n10.0.0.1', shape: 'box', color: '#18181b', font: { color: '#ffffff', face: 'monospace', size: 11 }, margin: 8, ...coords.h1, fixed: true },
                 { id: 's1', label: 's1 [Ingress]\nMixed Grid', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s1, fixed: true },
                 { id: 's2', label: 's2 [Coal]\n820 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s2, fixed: true },
-                { id: 's3', label: 's3 [Mixed]\n350 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s3, fixed: true },
-                { id: 's4', label: 's4 [Solar]\n45 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s4, fixed: true },
-                { id: 's5', label: 's5 [Gas]\n490 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s5, fixed: true },
-                { id: 's6', label: 's6 [Hydro]\n70 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s6, fixed: true },
-                { id: 's7', label: 's7 [Egress]\nNuclear Grid', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s7, fixed: true },
+                { id: 's3', label: 's3 [Gas]\n490 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s3, fixed: true },
+                { id: 's4', label: 's4 [Mixed]\n350 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s4, fixed: true },
+                { id: 's5', label: 's5 [Hydro]\n70 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s5, fixed: true },
+                { id: 's6', label: 's6 [Gas]\n490 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s6, fixed: true },
+                { id: 's7', label: 's7 [Mixed]\n350 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s7, fixed: true },
+                { id: 's8', label: 's8 [Hydro]\n70 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s8, fixed: true },
+                { id: 's9', label: 's9 [Solar]\n45 gCO2/kWh', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s9, fixed: true },
+                { id: 's10', label: 's10 [Egress]\nNuclear Grid', shape: 'box', color: '#18181b', font: { color: '#d4d4d8', size: 11 }, margin: 8, ...coords.s10, fixed: true },
                 { id: 'h2', label: 'Host 2\n10.0.0.2', shape: 'box', color: '#18181b', font: { color: '#ffffff', face: 'monospace', size: 11 }, margin: 8, ...coords.h2, fixed: true }
             ]);
 
+            const ef = { color: '#71717a', size: 9, align: 'top' };
             this.edgesDataSet = new vis.DataSet([
+                // Host links
                 { id: 'h1-s1', from: 'h1', to: 's1', color: { color: '#27272a' }, width: 1.5, dashes: true },
-                { id: 's1-s2', from: 's1', to: 's2', color: { color: '#27272a' }, width: 1.5, label: '1Gbps | 1ms', font: { color: '#71717a', size: 10, align: 'top' } },
-                { id: 's1-s3', from: 's1', to: 's3', color: { color: '#27272a' }, width: 1.5, label: '500M | 3ms', font: { color: '#71717a', size: 10, align: 'top' } },
-                { id: 's1-s4', from: 's1', to: 's4', color: { color: '#27272a' }, width: 1.5, label: '200M | 5ms', font: { color: '#71717a', size: 10, align: 'top' } },
-                { id: 's2-s5', from: 's2', to: 's5', color: { color: '#27272a' }, width: 1.5, label: '1Gbps | 1ms', font: { color: '#71717a', size: 10, align: 'top' } },
-                { id: 's3-s6', from: 's3', to: 's6', color: { color: '#27272a' }, width: 1.5, label: '500M | 3ms', font: { color: '#71717a', size: 10, align: 'top' } },
-                { id: 's5-s7', from: 's5', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '1Gbps | 1ms', font: { color: '#71717a', size: 10, align: 'top' } },
-                { id: 's6-s7', from: 's6', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '500M | 3ms', font: { color: '#71717a', size: 10, align: 'top' } },
-                { id: 's4-s7', from: 's4', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '200M | 5ms', font: { color: '#71717a', size: 10, align: 'top' } },
-                { id: 's7-h2', from: 's7', to: 'h2', color: { color: '#27272a' }, width: 1.5, dashes: true }
+                { id: 's10-h2', from: 's10', to: 'h2', color: { color: '#27272a' }, width: 1.5, dashes: true },
+                // Ingress
+                { id: 's1-s2', from: 's1', to: 's2', color: { color: '#27272a' }, width: 1.5, label: '10G | 0.5ms', font: ef },
+                { id: 's1-s3', from: 's1', to: 's3', color: { color: '#27272a' }, width: 1.5, label: '5G | 1.5ms', font: ef },
+                { id: 's1-s4', from: 's1', to: 's4', color: { color: '#27272a' }, width: 1.5, label: '2G | 3ms', font: ef },
+                { id: 's1-s5', from: 's1', to: 's5', color: { color: '#27272a' }, width: 1.5, label: '1G | 6ms', font: ef },
+                // Corridor links
+                { id: 's2-s6', from: 's2', to: 's6', color: { color: '#27272a' }, width: 1.5, label: '8G | 0.8ms', font: ef },
+                { id: 's3-s7', from: 's3', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '4G | 1.5ms', font: ef },
+                { id: 's4-s8', from: 's4', to: 's8', color: { color: '#27272a' }, width: 1.5, label: '3.5G | 1.5ms', font: ef },
+                { id: 's5-s9', from: 's5', to: 's9', color: { color: '#27272a' }, width: 1.5, label: '2.5G | 1.5ms', font: ef },
+                // Cross-links
+                { id: 's2-s7', from: 's2', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's3-s6', from: 's3', to: 's6', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's3-s8', from: 's3', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's4-s7', from: 's4', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's4-s9', from: 's4', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's5-s8', from: 's5', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                // Within-tier
+                { id: 's2-s3', from: 's2', to: 's3', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's3-s4', from: 's3', to: 's4', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's6-s7', from: 's6', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's8-s9', from: 's8', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                // Egress
+                { id: 's6-s10', from: 's6', to: 's10', color: { color: '#27272a' }, width: 1.5, label: '10G | 0.5ms', font: ef },
+                { id: 's7-s10', from: 's7', to: 's10', color: { color: '#27272a' }, width: 1.5, label: '5G | 1.5ms', font: ef },
+                { id: 's8-s10', from: 's8', to: 's10', color: { color: '#27272a' }, width: 1.5, label: '2G | 3ms', font: ef },
+                { id: 's9-s10', from: 's9', to: 's10', color: { color: '#27272a' }, width: 1.5, label: '1G | 5ms', font: ef }
             ]);
 
             const container = document.getElementById('networkGraph');
@@ -628,7 +656,7 @@ createApp({
                 id: e.id,
                 color: { color: '#27272a' },
                 width: 1.5,
-                dashes: e.id === 'h1-s1' || e.id === 's7-h2'
+                dashes: e.id === 'h1-s1' || e.id === 's10-h2'
             }));
 
             const applyHighlight = (path, colorHex, widthPx, isDashed = false) => {
