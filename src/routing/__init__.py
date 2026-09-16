@@ -215,20 +215,64 @@ def get_all_paths_evaluated(net: SDNNetwork, src_host: str, dst_host: str,
     src_sw = net.hosts[src_host].connected_switch
     dst_sw = net.hosts[dst_host].connected_switch
 
-    all_paths = list(nx.all_simple_paths(net.graph, source=src_sw, target=dst_sw))
+    # Step 1: Collect raw metrics for all links
+    raw_metrics = {}
+    seen = set()
+    for (s, d), link in net.links.items():
+        key = tuple(sorted([s, d]))
+        if key not in seen:
+            seen.add(key)
+            raw_metrics[key] = {
+                "latency": link.current_latency_ms,
+                "energy": _compute_link_energy(net, s, d),
+                "carbon": _compute_link_carbon(net, s, d),
+            }
 
+    # Step 2: Min-max normalization
+    all_lat = [m["latency"] for m in raw_metrics.values()]
+    all_eng = [m["energy"] for m in raw_metrics.values()]
+    all_crb = [m["carbon"] for m in raw_metrics.values()]
+
+    def normalize(val, vals):
+        mn, mx = min(vals), max(vals)
+        if mx == mn:
+            return 0.5
+        return (val - mn) / (mx - mn)
+
+    # Step 3: Build weighted graph with composite cost
+    G = nx.Graph()
+    for (s, d), metrics in raw_metrics.items():
+        norm_l = normalize(metrics["latency"], all_lat)
+        norm_e = normalize(metrics["energy"], all_eng)
+        norm_c = normalize(metrics["carbon"], all_crb)
+        cost = alpha * norm_l + beta * norm_e + gamma * norm_c
+        G.add_edge(s, d, weight=cost)
+
+    # Step 4: Use Yen's Algorithm (K-Shortest Paths) to get the top 8 paths
+    K = 8
     evaluated = []
-    for path in all_paths:
-        # Filter to switch-only paths (skip host nodes)
-        switch_path = [n for n in path if n in net.switches]
-        if len(switch_path) < 2:
-            continue
-        result = _evaluate_path(net, switch_path, "Evaluation")
-        evaluated.append({
-            "path": switch_path,
-            "total_latency_ms": round(result.total_latency_ms, 3),
-            "total_energy_joules": round(result.total_energy_joules, 3),
-            "total_carbon_mgco2": round(result.total_carbon_mgco2, 3),
-        })
+    
+    try:
+        # shortest_simple_paths yields paths in increasing order of weight (Yen's algorithm)
+        path_generator = nx.shortest_simple_paths(G, source=src_sw, target=dst_sw, weight="weight")
+        
+        for i, path in enumerate(path_generator):
+            if i >= K:
+                break
+                
+            switch_path = [n for n in path if n in net.switches]
+            if len(switch_path) < 2:
+                continue
+                
+            result = _evaluate_path(net, switch_path, "Evaluation")
+            
+            evaluated.append({
+                "path": switch_path,
+                "total_latency_ms": round(result.total_latency_ms, 3),
+                "total_energy_joules": round(result.total_energy_joules, 3),
+                "total_carbon_mgco2": round(result.total_carbon_mgco2, 3),
+            })
+    except nx.NetworkXNoPath:
+        pass
 
     return evaluated

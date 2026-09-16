@@ -441,22 +441,22 @@ createApp({
             edgesDataSet: null,
             scenarios: {
                 normal: {
-                    label: "Nominal Load",
-                    description: "Standard link utilization across all transit corridors (10-35%)."
+                    label: "Normal Network",
+                    description: "Baseline utilization across all links. Network is stable."
                 },
                 path_a_congested: {
                     label: "Path A Congested",
-                    description: "High queue contention on direct high-speed corridor (s1-s2-s5)."
+                    description: "High queue contention on direct high-speed corridor (s1-s2-s6)."
                 },
                 path_b_congested: {
                     label: "Path B Congested",
-                    description: "High queue contention on secondary corridor (s1-s3-s6)."
+                    description: "High queue contention on medium transit corridor (s1-s3-s7)."
                 },
                 multi_congestion: {
-                    label: "Multi-Corridor Congestion",
-                    description: "Heavy contention simultaneously on Path A and Path B."
+                    label: "Multiple Path Congestion",
+                    description: "Both fast (Path A) and medium (Path B) corridors are severely degraded."
                 }
-            }
+            },
         }
     },
     computed: {

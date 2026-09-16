@@ -188,6 +188,6 @@ The test suite evaluates 4 network traffic scenarios across 3 optimization profi
 
 * **Naman Goyal (Core Developer):** Designed the multi-layer framework architecture. Formulated the composite cost function and normalization engine in Python. Developed the switch energy dissipation and regional carbon accounting models. Built the FastAPI backend routing endpoints, application schemas, and coordinated subsystem integration.
 * **Saiyam Kalra (Frontend Developer):** Built the web-based monitoring dashboard using Vue.js and Tailwind CSS. Implemented the network graph canvas utilizing Vis.js with real-time active route rendering.
-* **Arnav Kumar (Network Engineer):** Designed the 7-switch multi-path topology structure. Formulated link parameter definitions and queuing delay behavior under simulated link utilization.
+* **Arnav Kumar (Network Engineer):** Designed the 10-switch multi-path topology structure. Formulated link parameter definitions and queuing delay behavior under simulated link utilization.
 * **Ranjit Mohanty (Data Analyst & Research):** Researched real-world regional power grid carbon intensity datasets. Designed the experimental scenario matrix and structured automated benchmarking routines.
 * **Atharva Sharma (QA & Technical Documentation):** Authored the High-Level Design document and presentation deck. Executed integration test verification across the API and simulation pipelines.
