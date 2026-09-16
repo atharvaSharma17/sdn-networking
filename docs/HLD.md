@@ -44,7 +44,7 @@ The system operates across three decoupled planes:
          |                             |
          v                             v
 [ Routing Computation Engine ]   [ SDN Network Simulator ]
-  - Baseline Dijkstra Solver       - 7-Switch Mesh Topology
+  - Baseline Dijkstra Solver       - 10-Switch Mesh Topology
   - CarbonRoute Composite Solver   - Dynamic M/M/1 Queuing Delay
   - Min-Max Feature Normalizer     - Regional Grid Carbon Factor
 ```
@@ -59,7 +59,7 @@ Represents the emulated SDN data plane. Switches and links maintain real-time op
 
 ### 3.2 Routing Engine (`src/routing/`)
 
-Evaluates candidate paths between ingress switch `s1` and egress switch `s7`. Supports two distinct algorithmic paths:
+Evaluates candidate paths between ingress switch `s1` and egress switch `s10`. Supports two distinct algorithmic paths:
 
 - **Baseline Dijkstra:** Solves for path minimizing link latency only.
 - **CarbonRoute:** Solves for path minimizing composite weighted cost.
@@ -133,21 +133,35 @@ Standard carbon intensity factors applied:
 
 ## 5. Network Topology Design
 
-The experimental topology consists of 7 OpenFlow-style switches connecting Host 1 (`10.0.0.1`) to Host 2 (`10.0.0.2`):
+The experimental topology consists of 10 OpenFlow-style switches arranged in a two-tier partial mesh connecting Host 1 (`10.0.0.1`) to Host 2 (`10.0.0.2`):
 
 ```
-                 +-- s2 (Coal Grid) ---- s5 (Gas Grid) ---+
-   h1 --- s1 ----+                                        +---- s7 --- h2
-                 +-- s3 (Mixed Grid) --- s6 (Hydro Grid) -+
-                 |                                        |
-                 +-- s4 (Solar Grid) ---------------------+
+              ┌────── s2 [Coal] ──────── s6 [Gas] ──────┐
+              │         │ ╲            ╱   │              │
+h1 --- s1 ----┤       s2↔s3  ╲      ╱    s6↔s7           +---- s10 --- h2
+   [Mixed]    │         │    ╲    ╱       │           [Nuclear]
+              +---- s3 [Gas] ──── s7 [Mixed] ────────────+
+              │         │   ╲          ╱   │              │
+              │       s3↔s4  ╲        ╱    │              │
+              +---- s4 [Mixed]──── s8 [Hydro] ────────────+
+              │         │              │                  │
+              │         │            s8↔s9                │
+              └──── s5 [Hydro] ──── s9 [Solar] ───────────┘
 ```
 
-Candidate transit paths:
+Candidate transit paths (all Pareto non-dominated):
 
-1. **Path A (High Speed / High Carbon):** `s1 -> s2 -> s5 -> s7` (1000 Mbps capacity, ~3 ms base delay, high grid emission).
-2. **Path B (Balanced Transit):** `s1 -> s3 -> s6 -> s7` (500 Mbps capacity, ~9 ms base delay, moderate grid emission).
-3. **Path C (Low Emission Transit):** `s1 -> s4 -> s7` (200 Mbps capacity, ~10 ms base delay, clean renewable grid).
+1. **Path A (High Speed / High Carbon):** `s1 -> s2 -> s6 -> s10` (10 Gbps ingress capacity, ~1.8 ms base delay, coal/gas grid emission).
+2. **Path B (Medium Transit):** `s1 -> s3 -> s7 -> s10` (5 Gbps ingress capacity, ~4.5 ms base delay, gas/mixed grid emission).
+3. **Path C (Clean Transit):** `s1 -> s4 -> s8 -> s10` (2 Gbps ingress capacity, ~7.5 ms base delay, mixed/hydro grid emission).
+4. **Path D (Low Emission Transit):** `s1 -> s5 -> s9 -> s10` (1 Gbps ingress capacity, ~12.5 ms base delay, hydro/solar grid emission).
+
+Cross-links between corridors enable hybrid routing paths that no single-objective algorithm would discover:
+
+- **X1 (Gas → Hydro hybrid):** `s1 -> s3 -> s8 -> s10` (gas entry, hydro exit).
+- **X2 (Mixed → Solar hybrid):** `s1 -> s4 -> s9 -> s10` (mixed entry, solar exit).
+
+Switch power profiles are differentiated by corridor: coal/gas corridor switches (s2, s3, s6) draw 68–90W idle / 275–380W max, while hydro/solar corridor switches (s5, s8, s9) draw 28–38W idle / 110–145W max, independently separating the energy and carbon metrics.
 
 ---
 
@@ -158,8 +172,8 @@ The test suite evaluates 4 network traffic scenarios across 3 optimization profi
 ### Scenarios
 
 1. **Normal Network:** Baseline traffic conditions across all links (10-35% utilization).
-2. **Fast Path Congested:** 85% traffic load injected onto Path A (`s1-s2`, `s2-s5`).
-3. **Medium Path Congested:** 85% traffic load injected onto Path B (`s1-s3`, `s3-s6`).
+2. **Fast Path Congested:** 85% traffic load injected onto Path A (`s1-s2`, `s2-s6`).
+3. **Medium Path Congested:** 85% traffic load injected onto Path B (`s1-s3`, `s3-s7`).
 4. **Multi-Path Congestion:** Heavy load injected on both Path A and Path B.
 
 ### Profiles

@@ -112,14 +112,14 @@ class SDNNetwork:
         """
         for key, link in self.links.items():
             # Base random utilization between 5% and 35%
-            link.utilization = random.uniform(0.05, 0.35)
+            link.utilization = random.uniform(0.10, 0.35)
             link.packet_loss = random.uniform(0.0, 0.5)
 
         # Inject congestion on specified links
         if congested_links:
             for src, dst in congested_links:
                 if (src, dst) in self.links:
-                    self.links[(src, dst)].utilization = random.uniform(0.7, 0.95)
+                    self.links[(src, dst)].utilization = 0.85
                     self.links[(src, dst)].packet_loss = random.uniform(2.0, 8.0)
 
     def get_link_stats(self, src: str, dst: str) -> dict:
@@ -185,46 +185,80 @@ class SDNNetwork:
 
 def build_demo_topology() -> SDNNetwork:
     """
-    Build a realistic multi-path topology for CarbonRoute demonstration.
+    Build a 10-switch two-tier partial mesh topology for CarbonRoute demonstration.
 
     Topology:
-                    ┌── s2 (coal) ──── s5 (gas) ──┐
-        h1 ── s1 ──┤                               ├── s7 ── h2
-                    ├── s3 (mixed) ─── s6 (hydro) ─┤
-                    └── s4 (solar) ─────────────────┘
+                  ┌────── s2 [Coal] ──────── s6 [Gas] ──────┐
+                  │         │ ╲            ╱   │              │
+    h1 ── s1 ────┤       s2↔s3  ╲      ╱    s6↔s7           ├── s10 ── h2
+       [Mixed]    │         │    ╲    ╱       │           [Nuclear]
+                  ├──── s3 [Gas] ──── s7 [Mixed] ────────────┤
+                  │         │   ╲          ╱   │              │
+                  │       s3↔s4  ╲        ╱    │              │
+                  ├──── s4 [Mixed]──── s8 [Hydro] ────────────┤
+                  │         │              │                  │
+                  │         │            s8↔s9                │
+                  └──── s5 [Hydro] ──── s9 [Solar] ───────────┘
 
-    Three distinct paths from h1 to h2:
-      Path A: s1 → s2 → s5 → s7  (Fastest, but dirtiest)
-      Path B: s1 → s3 → s6 → s7  (Medium speed, medium carbon)
-      Path C: s1 → s4 → s7        (Shortest hops, greenest)
+    Key paths (all Pareto non-dominated):
+      Path A: s1 → s2 → s6 → s10  (Fastest, highest carbon)
+      Path B: s1 → s3 → s7 → s10  (Medium speed, medium carbon)
+      Path C: s1 → s4 → s8 → s10  (Slower, clean)
+      Path D: s1 → s5 → s9 → s10  (Slowest, greenest)
+
+    Cross-links enable hybrid routing:
+      X1: s1 → s3 → s8 → s10  (Gas entry, Hydro exit)
+      X2: s1 → s4 → s9 → s10  (Mixed entry, Solar exit)
     """
     net = SDNNetwork()
 
-    # Switches with geographic region assignments
-    net.add_switch("s1", region="mixed_region")       # Ingress
-    net.add_switch("s2", region="coal_region")         # Path A
-    net.add_switch("s3", region="mixed_region")        # Path B
-    net.add_switch("s4", region="solar_region")        # Path C
-    net.add_switch("s5", region="gas_region")          # Path A
-    net.add_switch("s6", region="hydro_region")        # Path B
-    net.add_switch("s7", region="nuclear_region")      # Egress
+    # Switches with differentiated power profiles and regional grid assignments
+    net.add_switch("s1",  region="mixed_region",   idle_power=40,  max_power=150)   # Ingress
+    net.add_switch("s2",  region="coal_region",    idle_power=90,  max_power=380)   # Tier-1 fast/dirty
+    net.add_switch("s3",  region="gas_region",     idle_power=70,  max_power=290)   # Tier-1 medium
+    net.add_switch("s4",  region="mixed_region",   idle_power=45,  max_power=175)   # Tier-1 medium
+    net.add_switch("s5",  region="hydro_region",   idle_power=38,  max_power=145)   # Tier-1 clean
+    net.add_switch("s6",  region="gas_region",     idle_power=68,  max_power=275)   # Tier-2 fast exit
+    net.add_switch("s7",  region="mixed_region",   idle_power=42,  max_power=165)   # Tier-2 medium exit
+    net.add_switch("s8",  region="hydro_region",   idle_power=35,  max_power=135)   # Tier-2 clean exit
+    net.add_switch("s9",  region="solar_region",   idle_power=28,  max_power=110)   # Tier-2 greenest exit
+    net.add_switch("s10", region="nuclear_region", idle_power=30,  max_power=120)   # Egress
 
     # Hosts
     net.add_host("h1", ip="10.0.0.1", mac="00:00:00:00:00:01", connected_switch="s1")
-    net.add_host("h2", ip="10.0.0.2", mac="00:00:00:00:00:02", connected_switch="s7")
+    net.add_host("h2", ip="10.0.0.2", mac="00:00:00:00:00:02", connected_switch="s10")
 
-    # Path A: Fast but dirty (coal + gas regions)
-    net.add_link("s1", "s2", bandwidth_mbps=1000, latency_ms=1.0)
-    net.add_link("s2", "s5", bandwidth_mbps=1000, latency_ms=1.0)
-    net.add_link("s5", "s7", bandwidth_mbps=1000, latency_ms=1.0)
+    # --- Ingress links (s1 → Tier-1) ---
+    net.add_link("s1", "s2", bandwidth_mbps=10000, latency_ms=0.5)   # Ultra-fast entry
+    net.add_link("s1", "s3", bandwidth_mbps=5000,  latency_ms=1.5)   # Fast entry
+    net.add_link("s1", "s4", bandwidth_mbps=2000,  latency_ms=3.0)   # Medium entry
+    net.add_link("s1", "s5", bandwidth_mbps=1000,  latency_ms=6.0)   # Slow clean entry
 
-    # Path B: Medium speed, cleaner (mixed + hydro)
-    net.add_link("s1", "s3", bandwidth_mbps=500, latency_ms=3.0)
-    net.add_link("s3", "s6", bandwidth_mbps=500, latency_ms=3.0)
-    net.add_link("s6", "s7", bandwidth_mbps=500, latency_ms=3.0)
+    # --- Corridor links (Tier-1 → Tier-2 along same corridor) ---
+    net.add_link("s2", "s6", bandwidth_mbps=8000,  latency_ms=0.8)   # Coal → Gas backbone
+    net.add_link("s3", "s7", bandwidth_mbps=4000,  latency_ms=1.5)   # Gas → Mixed
+    net.add_link("s4", "s8", bandwidth_mbps=3500,  latency_ms=1.5)   # Mixed → Hydro
+    net.add_link("s5", "s9", bandwidth_mbps=2500,  latency_ms=1.5)   # Hydro → Solar
 
-    # Path C: Fewest hops, greenest, but lower bandwidth (solar)
-    net.add_link("s1", "s4", bandwidth_mbps=200, latency_ms=5.0)
-    net.add_link("s4", "s7", bandwidth_mbps=200, latency_ms=5.0)
+    # --- Cross-links (Tier-1 → Tier-2 across corridors) ---
+    net.add_link("s2", "s7", bandwidth_mbps=1500,  latency_ms=3.0)   # Coal → Mixed
+    net.add_link("s3", "s6", bandwidth_mbps=5000,  latency_ms=1.0)   # Gas → Gas fast
+    net.add_link("s3", "s8", bandwidth_mbps=2500,  latency_ms=2.0)   # Gas → Hydro (hybrid)
+    net.add_link("s4", "s7", bandwidth_mbps=3000,  latency_ms=2.0)   # Mixed → Mixed
+    net.add_link("s4", "s9", bandwidth_mbps=1500,  latency_ms=2.5)   # Mixed → Solar (hybrid)
+    net.add_link("s5", "s8", bandwidth_mbps=2000,  latency_ms=2.5)   # Hydro → Hydro
+
+    # --- Within-tier cross-links ---
+    net.add_link("s2", "s3", bandwidth_mbps=2000,  latency_ms=2.0)   # Tier-1: Coal ↔ Gas
+    net.add_link("s3", "s4", bandwidth_mbps=1500,  latency_ms=2.5)   # Tier-1: Gas ↔ Mixed
+    net.add_link("s6", "s7", bandwidth_mbps=2000,  latency_ms=2.0)   # Tier-2: Gas ↔ Mixed
+    net.add_link("s8", "s9", bandwidth_mbps=2000,  latency_ms=1.5)   # Tier-2: Hydro ↔ Solar
+
+    # --- Egress links (Tier-2 → s10) ---
+    net.add_link("s6",  "s10", bandwidth_mbps=10000, latency_ms=0.5)  # Fast exit
+    net.add_link("s7",  "s10", bandwidth_mbps=5000,  latency_ms=1.5)  # Medium exit
+    net.add_link("s8",  "s10", bandwidth_mbps=2000,  latency_ms=3.0)  # Slower clean exit
+    net.add_link("s9",  "s10", bandwidth_mbps=1000,  latency_ms=5.0)  # Greenest exit
 
     return net
+

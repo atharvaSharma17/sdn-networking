@@ -22,7 +22,7 @@ class RouteResult:
     path: List[str]
     total_latency_ms: float
     total_energy_joules: float
-    total_carbon_gco2: float
+    total_carbon_mgco2: float
     total_cost: float
     per_hop: List[dict]
 
@@ -32,7 +32,7 @@ class RouteResult:
             "path": self.path,
             "total_latency_ms": round(self.total_latency_ms, 3),
             "total_energy_joules": round(self.total_energy_joules, 3),
-            "total_carbon_gco2": round(self.total_carbon_gco2, 3),
+            "total_carbon_mgco2": round(self.total_carbon_mgco2, 3),
             "total_cost": round(self.total_cost, 3),
             "per_hop": self.per_hop,
         }
@@ -105,7 +105,7 @@ def _evaluate_path(net: SDNNetwork, path: List[str], algorithm: str) -> RouteRes
             "hop": f"{src} → {dst}",
             "latency_ms": round(hop_latency, 3),
             "energy_j": round(hop_energy, 3),
-            "carbon_gco2": round(hop_carbon, 3),
+            "carbon_mgco2": round(hop_carbon, 3),
             "utilization": round(link.utilization, 3),
         })
 
@@ -114,7 +114,7 @@ def _evaluate_path(net: SDNNetwork, path: List[str], algorithm: str) -> RouteRes
         path=path,
         total_latency_ms=total_latency,
         total_energy_joules=total_energy,
-        total_carbon_gco2=total_carbon,
+        total_carbon_mgco2=total_carbon,
         total_cost=0.0,  # Filled in by algorithm
         per_hop=per_hop,
     )
@@ -228,7 +228,7 @@ def get_all_paths_evaluated(net: SDNNetwork, src_host: str, dst_host: str,
             "path": switch_path,
             "total_latency_ms": round(result.total_latency_ms, 3),
             "total_energy_joules": round(result.total_energy_joules, 3),
-            "total_carbon_gco2": round(result.total_carbon_gco2, 3),
+            "total_carbon_mgco2": round(result.total_carbon_mgco2, 3),
         })
 
     return evaluated
