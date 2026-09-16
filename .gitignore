@@ -11,3 +11,19 @@ env/
 
 # Testing
 .pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Build & Distribution
+build/
+dist/
+*.egg-info/
+
+# Temporary debugging scripts
+test_frontend.py
