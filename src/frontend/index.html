@@ -30,9 +30,7 @@
             background-color: #18181b;
             border-radius: 0.5rem;
         }
-        input[type=range] {
-            accent-color: #34d399;
-        }
+
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 font-sans min-h-screen flex flex-col antialiased selection:bg-zinc-800 selection:text-white">
@@ -129,7 +127,7 @@
                                     <span class="text-white font-semibold">{{ alpha.toFixed(2) }}</span>
                                 </div>
                                 <input type="range" min="0" max="100" v-model.number="alphaInt" @input="onSliderChange('alpha')"
-                                       class="w-full h-1 bg-zinc-800 rounded appearance-none cursor-pointer">
+                                       class="w-full h-1 bg-zinc-800 rounded cursor-pointer appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-none [&::-moz-range-thumb]:rounded-full">
                             </div>
 
                             <div>
@@ -138,7 +136,7 @@
                                     <span class="text-white font-semibold">{{ beta.toFixed(2) }}</span>
                                 </div>
                                 <input type="range" min="0" max="100" v-model.number="betaInt" @input="onSliderChange('beta')"
-                                       class="w-full h-1 bg-zinc-800 rounded appearance-none cursor-pointer">
+                                       class="w-full h-1 bg-zinc-800 rounded cursor-pointer appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-none [&::-moz-range-thumb]:rounded-full">
                             </div>
 
                             <div>
@@ -188,7 +186,7 @@
                             <!-- Monochrome Legend -->
                             <div class="flex flex-wrap items-center gap-4 text-xs">
                                 <span class="flex items-center gap-1.5">
-                                    <span class="w-3.5 h-1 bg-emerald-400 rounded-sm"></span>
+                                    <span class="w-3.5 h-1 bg-white rounded-sm"></span>
                                     <span class="text-zinc-200 font-semibold">CarbonRoute</span>
                                 </span>
                                 <span class="flex items-center gap-1.5">
@@ -381,7 +379,7 @@
                     <div>
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-sm font-semibold text-zinc-200">Path {{ String.fromCharCode(65 + idx) }}</span>
-                            <span class="text-xs px-2 py-0.5 rounded-md border border-zinc-700 text-zinc-500"></span>
+                            <span class="text-xs px-2 py-0.5 rounded-md border border-zinc-700 text-zinc-500">
                                 {{ p.path.length - 1 }} hops
                             </span>
                         </div>
@@ -447,15 +445,15 @@ createApp({
                 },
                 path_a_congested: {
                     label: "Path A Congested",
-                    description: "High traffic on s1-s2-s5."
+                    description: "High traffic on the s1-s2-s6 corridor."
                 },
                 path_b_congested: {
                     label: "Path B Congested",
-                    description: "High traffic on s1-s3-s6."
+                    description: "High traffic on the s1-s3-s7 corridor."
                 },
                 multi_congestion: {
                     label: "Paths A & B Congested",
-                    description: "High traffic on both paths."
+                    description: "High traffic on top corridors."
                 }
             },
         }
@@ -531,7 +529,11 @@ createApp({
             try {
                 const res = await fetch(`${API}/api/v1/routes/compute`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    },
                     body: JSON.stringify({
                         alpha: this.alpha,
                         beta: this.beta,
@@ -556,8 +558,9 @@ createApp({
         },
         async refreshNetworkTraffic() {
             try {
-                await fetch(`${API}/api/v1/metrics/refresh`, { method: 'POST' });
-                this.computeRoute();
+                // The computeRoute endpoint already randomizes traffic on the backend, 
+                // so we can just call it directly to guarantee the UI updates.
+                await this.computeRoute();
             } catch (err) {
                 console.error("Traffic regeneration error:", err);
             }
@@ -630,18 +633,18 @@ createApp({
                 { id: 's3-s7', from: 's3', to: 's7', color: { color: '#27272a' }, width: 1.5, label: '4G | 1.5ms', font: ef },
                 { id: 's4-s8', from: 's4', to: 's8', color: { color: '#27272a' }, width: 1.5, label: '3.5G | 1.5ms', font: ef },
                 { id: 's5-s9', from: 's5', to: 's9', color: { color: '#27272a' }, width: 1.5, label: '2.5G | 1.5ms', font: ef },
-                // Cross-links
-                { id: 's2-s7', from: 's2', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's3-s6', from: 's3', to: 's6', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's3-s8', from: 's3', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's4-s7', from: 's4', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's4-s9', from: 's4', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's5-s8', from: 's5', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                // Cross-links (shifted specific labels further to the left)
+                { id: 's2-s7', from: 's2', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '1.5G | 3ms                                   ', font: ef },
+                { id: 's3-s6', from: 's3', to: 's6', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '5G | 1ms                                   ', font: ef },
+                { id: 's3-s8', from: 's3', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2.5G | 2ms                                   ', font: ef },
+                { id: 's4-s7', from: 's4', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '3G | 2ms                                   ', font: ef },
+                { id: 's4-s9', from: 's4', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '1.5G | 2.5ms                                   ', font: ef },
+                { id: 's5-s8', from: 's5', to: 's8', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2G | 2.5ms                                   ', font: ef },
                 // Within-tier
-                { id: 's2-s3', from: 's2', to: 's3', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's3-s4', from: 's3', to: 's4', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's6-s7', from: 's6', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
-                { id: 's8-s9', from: 's8', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4] },
+                { id: 's2-s3', from: 's2', to: 's3', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2G | 2ms', font: ef },
+                { id: 's3-s4', from: 's3', to: 's4', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '1.5G | 2.5ms', font: ef },
+                { id: 's6-s7', from: 's6', to: 's7', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2G | 2ms', font: ef },
+                { id: 's8-s9', from: 's8', to: 's9', color: { color: '#27272a' }, width: 1, dashes: [4,4], label: '2G | 1.5ms', font: ef },
                 // Egress
                 { id: 's6-s10', from: 's6', to: 's10', color: { color: '#27272a' }, width: 1.5, label: '10G | 0.5ms', font: ef },
                 { id: 's7-s10', from: 's7', to: 's10', color: { color: '#27272a' }, width: 1.5, label: '5G | 1.5ms', font: ef },
